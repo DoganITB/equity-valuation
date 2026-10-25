@@ -138,8 +138,9 @@ def select_peers(P, ticker, exchange, date, n=5):
             r = FY.peer_row(tk + sfx, tk, date, notes)
         except Exception as e:
             evald.append({"ticker": tk, "name": name, "score": 0, "reasons": [f"no data ({type(e).__name__})"], "selected": False}); continue
-        if r.get("price") is None:
-            evald.append({"ticker": tk, "name": name, "score": 0, "reasons": ["no price on Yahoo"], "selected": False}); continue
+        if not r.get("complete", True):
+            miss = [k for k in FY.PEER_REQUIRED if r.get(k) is None]
+            evald.append({"ticker": tk, "name": r.get("name") or name, "score": 0, "reasons": [f"not usable: Yahoo has no {', '.join(miss)}"], "selected": False}); continue
         sc, why, ratio = score_peer(t, r, level)
         r["closeModel"] = level == "industry" and ratio is not None and 0.2 <= ratio <= 5
         evald.append({"ticker": tk, "name": r.get("name") or name, "score": sc, "reasons": why, "selected": False, "_row": r})

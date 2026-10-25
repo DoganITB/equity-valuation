@@ -121,28 +121,46 @@ def growth(d, years):
     a, b = d.get(years[-2]), d.get(years[-1])
     return None if a in (None, 0) or b is None else (b - a) / abs(a)
 
+PEER_REQUIRED = ("price", "sharesMn", "eps", "bvps", "debt", "cash")
+
 def peer_row(sym, ticker, date, notes):
+    """One peer row; every field falls back to a second Yahoo source so that small IDX companies are covered."""
     import yfinance as yf
     tk = yf.Ticker(sym)
     info = safe_info(tk)
     price, pdate = price_on(tk, date)
+    if price is None: price = num(info.get("currentPrice")) or num(info.get("regularMarketPrice")) or num(info.get("previousClose"))
     inc, bal, _ = statements(tk)
     ys = years_of(inc, bal, n=2)
-    shares = num(info.get("sharesOutstanding")) or fi_shares(tk)
-    eq = row(bal, "Stockholders Equity", "Common Stock Equity").get(ys[-1]) if ys else None
-    rev, ni = row(inc, "Total Revenue"), row(inc, "Net Income Common Stockholders", "Net Income")
-    eps = row(inc, "Basic EPS", "Diluted EPS").get(ys[-1]) if ys else None
-    if eps is None and shares and ni.get(ys[-1] if ys else ""):
-        eps = ni[ys[-1]] / shares
-    debt = row(bal, "Total Debt").get(ys[-1]) if ys else None
-    cash = row(bal, "Cash And Cash Equivalents").get(ys[-1]) if ys else None
+    def latest(d):   # value of the latest year that has one
+        if not d: return None
+        if ys and ys[-1] in d: return d[ys[-1]]
+        return d[max(d)]
+    shares = num(info.get("sharesOutstanding")) or fi_shares(tk) or num(info.get("impliedSharesOutstanding"))
+    eq = latest(row(bal, "Stockholders Equity", "Common Stock Equity", "Total Equity Gross Minority Interest"))
+    rev, ni = row(inc, "Total Revenue", "Operating Revenue"), row(inc, "Net Income Common Stockholders", "Net Income", "Net Income From Continuing Operation Net Minority Interest")
+    eps = latest(row(inc, "Basic EPS", "Diluted EPS"))
+    if eps is None and shares and latest(ni) is not None: eps = latest(ni) / shares
+    if eps is None: eps = num(info.get("trailingEps")) or num(info.get("epsTrailingTwelveMonths"))
+    debt = latest(row(bal, "Total Debt"))
+    if debt is None:
+        parts = [latest(row(bal, k)) for k in ("Current Debt And Capital Lease Obligation", "Long Term Debt And Capital Lease Obligation")]
+        if all(p is None for p in parts): parts = [latest(row(bal, k)) for k in ("Current Debt", "Long Term Debt", "Current Capital Lease Obligation", "Long Term Capital Lease Obligation")]
+        if any(p is not None for p in parts): debt = sum(p or 0.0 for p in parts)
+    if debt is None and num(info.get("totalDebt")) is not None: debt = num(info.get("totalDebt"))
+    if debt is None and latest(row(bal, "Total Liabilities Net Minority Interest")) is not None:
+        debt = 0.0; notes.append(f"Peer {ticker}: no borrowings reported on Yahoo's balance sheet - debt set to 0; check the annual report.")
+    cash = latest(row(bal, "Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments", "Cash Financial"))
+    if cash is None: cash = num(info.get("totalCash"))
+    bvps = eq / shares if eq and shares else num(info.get("bookValue"))
     r = {"ticker": ticker, "name": info.get("longName") or info.get("shortName") or ticker, "price": price, "priceDate": pdate or date,
-         "sharesMn": shares / MN if shares else None, "eps": eps, "bvps": eq / shares if eq and shares else num(info.get("bookValue")),
+         "sharesMn": shares / MN if shares else None, "eps": eps, "bvps": bvps,
          "revGrowth": growth(rev, ys), "niGrowth": growth(ni, ys), "debt": debt / MN if debt is not None else None,
          "cash": cash / MN if cash is not None else None, "evEbitda": num(info.get("enterpriseToEbitda")),
          "audited": False, "closeModel": True, "source": f"Yahoo Finance via yfinance, FY{ys[-1] if ys else '?'}, retrieved {dt.date.today()}"}
-    gaps = [k for k, v in r.items() if v is None]
-    if gaps: notes.append(f"Peer {ticker}: no Yahoo value for {', '.join(gaps)}.")
+    gaps = [k for k in PEER_REQUIRED if r.get(k) is None]
+    r["complete"] = not gaps
+    if gaps: notes.append(f"Peer {ticker}: Yahoo has no {', '.join(gaps)} - not usable as a peer.")
     fc, pc = info.get("financialCurrency"), info.get("currency")
     if fc and pc and fc != pc: notes.append(f"Peer {ticker}: statements in {fc} but price in {pc} - convert EPS, BVPS, debt and cash before use.")
     return r

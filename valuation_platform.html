@@ -655,6 +655,8 @@ function applyPayload(P){
     D.financials.source = F.source || D.financials.source;
   }
   if ((P.peers || []).length) {
+    const REQ = ["price","sharesMn","eps","bvps","debt","cash"], okp = P.peers.filter(p => REQ.every(k => isNum(p[k])));
+    if (okp.length && okp.length < P.peers.length) { const drop = P.peers.filter(p => !okp.includes(p)); notes.push(`Left out because the source has incomplete data (${drop.map(p => p.ticker + ": no " + REQ.filter(k => !isNum(p[k])).join("/")).join("; ")}) – add the figures on Peer data if you want them.`); P.peers = okp; }
     const old = Object.fromEntries(D.peers.map(p => [String(p.ticker).toUpperCase(), p]));
     const rows = [PEER_COLS.map(c => c[0])].concat(P.peers.map(p => { const o = old[String(p.ticker).toUpperCase()];
       return PEER_COLS.map(([k]) => k === "audited" ? (o ? o.audited : p.audited) : k === "closeModel" ? (o ? o.closeModel : p.closeModel) : (p[k] ?? "")); }));
