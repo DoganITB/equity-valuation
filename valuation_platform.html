@@ -1,0 +1,1626 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}img{max-width:100%}</style></head><body>
+<title>Equity Valuation Platform</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky top bar with the live verdict, left rail of views, one working view at a time.
+   Concept: an analyst's valuation desk - ledger tables, meter-style figures, units from the dataset. */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --surface-2:#eaeef2; --ink:#14202c; --ink-2:#465564; --ink-3:#6f7d8b;
+  --line:#d6dde4; --line-2:#e6ebef; --accent:#0d5c8a; --accent-2:#e3eef6; --accent-ink:#ffffff;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --good:#1b7a3d; --good-bg:#e3f3e8; --warn:#9a6300; --warn-bg:#fbf0d9; --bad:#b8352d; --bad-bg:#f9e2df;
+  --shadow:0 1px 2px rgba(20,32,44,.06),0 2px 8px rgba(20,32,44,.05);
+  --f-display:"Archivo","Arial Narrow",Arial,sans-serif; --f-body:"IBM Plex Sans","Segoe UI",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e141a; --surface:#151d25; --surface-2:#1c2630; --ink:#e6ecf1; --ink-2:#a8b5c1; --ink-3:#7f8d99;
+  --line:#2b3743; --line-2:#222d38; --accent:#5aa8da; --accent-2:#18303f; --accent-ink:#0e141a;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --good:#5cc386; --good-bg:#16301f; --warn:#e0a640; --warn-bg:#33270f; --bad:#ef7a70; --bad-bg:#3a1b19;
+  --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e141a; --surface:#151d25; --surface-2:#1c2630; --ink:#e6ecf1; --ink-2:#a8b5c1; --ink-3:#7f8d99;
+  --line:#2b3743; --line-2:#222d38; --accent:#5aa8da; --accent-2:#18303f; --accent-ink:#0e141a;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --good:#5cc386; --good-bg:#16301f; --warn:#e0a640; --warn-bg:#33270f; --bad:#ef7a70; --bad-bg:#3a1b19;
+  --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{color:var(--ink);font:14px/1.5 var(--f-body);margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--surface)}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;text-wrap:balance;margin:0;letter-spacing:.005em}
+h2{font-size:22px;font-weight:700}
+h3{font-size:16px;font-weight:700}
+p{margin:0}
+a{color:var(--accent)}
+.num,.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-3)}
+.small{font-size:12px}
+.eyebrow{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+button,.btn{font:inherit;font-weight:600;font-size:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:var(--r);padding:7px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;line-height:1.2}
+button:hover{border-color:var(--accent)}
+.small-btn{font-size:12px;padding:4px 9px;text-decoration:none}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.ghost{background:transparent}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,label.file:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:5px 7px;min-width:0}
+input.cell{font-family:var(--f-mono);font-size:13px;width:100%;text-align:right;padding:4px 6px;font-variant-numeric:tabular-nums}
+input.cell.txt{text-align:left;font-family:var(--f-body)}
+input.cell.missing{border-color:var(--bad);background:var(--bad-bg)}
+input.cell.changed{border-color:var(--accent)}
+
+/* top bar */
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--surface);border-bottom:1px solid var(--line)}
+.topbar-in{display:flex;flex-wrap:wrap;align-items:center;gap:10px 24px;padding-block:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.brand h1{font-size:19px;font-weight:800}
+.brand .tick{font-family:var(--f-mono);font-size:12px;color:var(--ink-2);border:1px solid var(--line);border-radius:3px;padding:1px 6px}
+.live{display:flex;flex-wrap:wrap;gap:6px 20px;margin-left:auto;align-items:center}
+.live .kv{display:flex;flex-direction:column;line-height:1.15}
+.live .kv b{font-family:var(--f-mono);font-size:15px;font-weight:600}
+.pill{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12px;letter-spacing:.06em;border-radius:999px;padding:4px 10px;border:1px solid transparent;white-space:nowrap}
+.pill.ok{background:var(--good-bg);color:var(--good);border-color:var(--good)}
+.pill.warn{background:var(--warn-bg,var(--surface));color:var(--warn,var(--ink));border-color:var(--warn,var(--line))}
+.pill.BUY{background:var(--good-bg);color:var(--good);border-color:var(--good)}
+.pill.SELL{background:var(--bad-bg);color:var(--bad);border-color:var(--bad)}
+.pill.HOLD{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
+.pill.SUSPENDED{background:var(--surface-2);color:var(--bad);border-color:var(--bad)}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+
+/* shell */
+.shell{display:grid;grid-template-columns:212px minmax(0,1fr);gap:20px;align-items:start;padding-block:18px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1440px;margin:0 auto}
+nav.rail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 72px);display:flex;flex-direction:column;gap:2px}
+nav.rail .grp{margin:12px 0 4px 8px}
+nav.rail a{display:flex;justify-content:space-between;align-items:center;text-decoration:none;color:var(--ink-2);padding:7px 10px;border-radius:var(--r);font-weight:500}
+nav.rail a:hover{background:var(--surface-2);color:var(--ink)}
+nav.rail a[aria-current="page"]{background:var(--accent-2);color:var(--ink);font-weight:600;box-shadow:inset 3px 0 0 var(--accent)}
+nav.rail .badge{font-family:var(--f-mono);font-size:11px;border-radius:999px;padding:0 6px}
+.badge.err{background:var(--bad-bg);color:var(--bad)} .badge.warn{background:var(--warn-bg);color:var(--warn)}
+main{min-width:0;display:flex;flex-direction:column;gap:18px}
+.view-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:10px}
+.view-head p{color:var(--ink-2);max-width:72ch}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.panel > h3{margin-bottom:10px}
+.panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
+.grid{display:grid;gap:18px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g-dash{grid-template-columns:minmax(0,1.05fr) minmax(0,1.6fr)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.stack{display:flex;flex-direction:column;gap:10px}
+
+/* verdict ticket */
+.ticket{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden;box-shadow:var(--shadow)}
+.ticket-top{padding:16px 18px;border-bottom:1px dashed var(--line);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:start}
+.verdict{font-family:var(--f-display);font-stretch:80%;font-weight:800;font-size:44px;line-height:1}
+.verdict.BUY{color:var(--good)} .verdict.SELL{color:var(--bad)} .verdict.HOLD{color:var(--warn)} .verdict.SUSPENDED{color:var(--bad);font-size:32px}
+.meter{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
+.meter > div{padding:12px 18px;border-bottom:1px solid var(--line-2)}
+.meter > div:nth-child(odd){border-right:1px solid var(--line-2)}
+.meter .v{font-family:var(--f-mono);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.meter .v.up{color:var(--good)} .meter .v.down{color:var(--bad)}
+.ticket-foot{padding:10px 18px;font-size:12px;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:4px 14px}
+
+/* tables */
+.tbl-wrap{overflow-x:auto;max-width:100%}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line-2);text-align:left;vertical-align:top}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;white-space:nowrap}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.total td{font-weight:600;border-top:1px solid var(--line);background:var(--surface-2)}
+tr.sub td{color:var(--ink-3)}
+td.lbl{white-space:nowrap}
+.tbl-edit td{padding:3px 4px}
+.tbl-edit td.lbl{padding-left:8px}
+.status{display:inline-flex;gap:6px;align-items:center;font-weight:600;font-size:12px;white-space:nowrap}
+.status.ok{color:var(--good)} .status.warn{color:var(--warn)} .status.err{color:var(--bad)}
+.ico{width:14px;height:14px;flex:none}
+.criteria{display:flex;flex-direction:column;gap:6px}
+.crit{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px;align-items:start}
+.note{border-left:3px solid var(--accent);background:var(--accent-2);padding:10px 12px;border-radius:0 var(--r) var(--r) 0;color:var(--ink)}
+.note.warn{border-color:var(--warn);background:var(--warn-bg)}
+.note.bad{border-color:var(--bad);background:var(--bad-bg)}
+.kvlist{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px}
+.kvlist dt{color:var(--ink-3)} .kvlist dd{margin:0;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+ul.plain{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.seg button{border:0;border-radius:0;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+label.file{position:relative;overflow:hidden}
+label.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{font-size:12px;color:var(--ink-2);font-weight:500}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.unit{font-size:11px;color:var(--ink-3)}
+.src{font-size:11px;color:var(--ink-3);margin-top:2px}
+.bar-inline{height:8px;border-radius:0 4px 4px 0;display:block}
+.log{font-family:var(--f-mono);font-size:12px;max-height:220px;overflow:auto;border:1px solid var(--line-2);border-radius:4px;padding:6px 8px;background:var(--surface-2)}
+.toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:var(--r);box-shadow:var(--shadow);z-index:40;max-width:min(420px,calc(100vw - 32px))}
+.doc{max-width:78ch;display:flex;flex-direction:column;gap:10px}
+.doc h3{margin-top:10px}
+.doc code{font-family:var(--f-mono);font-size:12.5px;background:var(--surface-2);padding:1px 4px;border-radius:3px}
+.formula{font-family:var(--f-mono);font-size:12.5px;background:var(--surface-2);border-radius:4px;padding:8px 10px;overflow-x:auto;white-space:pre}
+svg text{font-family:var(--f-body)}
+svg .tnum{font-family:var(--f-mono)}
+.chart{width:100%;height:auto;display:block}
+.tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:6px 8px;border-radius:4px;z-index:50;max-width:260px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--ink-2)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:5px;vertical-align:-2px}
+.heat td.n{border:1px solid var(--line-2)}
+.heat td.base{outline:2px solid var(--accent);outline-offset:-2px;font-weight:600}
+.callout-num{font-family:var(--f-mono);font-size:26px;font-weight:600}
+@media (max-width: 980px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  nav.rail{position:static;flex-direction:row;overflow-x:auto;gap:4px;padding-bottom:4px}
+  nav.rail .grp{display:none}
+  nav.rail a{white-space:nowrap;border:1px solid var(--line)}
+  .g-dash,.g2,.g3{grid-template-columns:minmax(0,1fr)}
+  .live{margin-left:0}
+}
+@media (max-width: 520px){ .verdict{font-size:36px} .meter .v{font-size:18px} .meter{grid-template-columns:minmax(0,1fr)} .meter > div:nth-child(odd){border-right:0} }
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<header class="topbar"><div class="topbar-in">
+  <div class="brand"><h1>Equity Valuation Platform</h1><span class="tick" id="tb-tick"></span><span class="muted small" id="tb-co"></span></div>
+  <div class="live" id="live"></div>
+</div></header>
+
+<div class="shell">
+  <nav class="rail" id="rail" aria-label="Views"></nav>
+  <main id="main"></main>
+</div>
+<div class="tip" id="tip" hidden></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>/* BIRD Valuation Platform - calculation engine (JavaScript).
+ * Pure functions: valuate(data) -> results. No DOM access.
+ * Mirrors engine_ref.py (Python reference engine); test_engines.js checks both agree.
+ * Units: IDR million; per-share in IDR; shares in million. */
+(function (root) {
+  "use strict";
+  const sum = a => a.reduce((s, x) => s + x, 0);
+  const median = a => { const x = a.filter(v => v !== null && v !== undefined && !Number.isNaN(v)).slice().sort((p, q) => p - q);
+    if (!x.length) return null; const m = Math.floor(x.length / 2); return x.length % 2 ? x[m] : (x[m - 1] + x[m]) / 2; };
+  const mean = a => sum(a) / a.length;
+  const stdev = a => { const m = mean(a); return Math.sqrt(sum(a.map(v => (v - m) ** 2)) / (a.length - 1)); };
+  const isNum = v => typeof v === "number" && Number.isFinite(v);
+  const daysBetween = (a, b) => { const p = s => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); };
+    return Math.abs(Math.round((p(a) - p(b)) / 86400000)); };
+  const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
+  const fmt0 = v => Math.abs(v) < 100 ? v.toLocaleString("en-US", {maximumFractionDigits: 2}) : Math.round(v).toLocaleString("en-US");
+
+  function historicals(D) {
+    const f = D.financials, m = D.market, n = f.years.length, L = n - 1, t = m.tax;
+    const g = (k, i) => f[k][i];
+    const idx = [...Array(n).keys()];
+    const ebitda = idx.map(i => g("da", i) == null ? null : g("ebit", i) + g("da", i));
+    const debt = idx.map(i => g("bankLoans", i) == null ? null : g("bankLoans", i) + (g("leases", i) || 0));
+    const netCapex = idx.map(i => g("capex", i) == null ? null : g("capex", i) - (g("disposalProceeds", i) || 0));
+    const invested = idx.map(i => debt[i] == null ? null : g("equityTotal", i) + debt[i] - g("cash", i));
+    const ebitMargin = idx.map(i => g("ebit", i) / g("revenue", i));
+    const growth = idx.map(i => i === 0 ? null : g("revenue", i) / g("revenue", i - 1) - 1);
+    const reinv = idx.map(i => {
+      if (netCapex[i] == null || g("da", i) == null) return null;
+      let dn = 0;
+      if (i > 0 && f.opNWC[i] != null && f.opNWC[i - 1] != null) dn = f.opNWC[i] - f.opNWC[i - 1];
+      return netCapex[i] - g("da", i) + dn;
+    });
+    const fcff = idx.map(i => reinv[i] == null ? null : g("ebit", i) * (1 - t) - reinv[i]);
+    return {
+      n, L, ebitda, debt, netCapex, invested, ebitMargin, growth, reinv, fcff,
+      marginalS2C: (g("revenue", L) - g("revenue", L - 2)) / (reinv[L - 1] + reinv[L]),
+      ebitdaMargin: ebitda[L] / g("revenue", L), daPct: g("da", L) / g("revenue", L),
+      cagr: Math.pow(g("revenue", L) / g("revenue", 0), 1 / (n - 1)) - 1,
+      capexIntensity: netCapex[L] / g("revenue", L),
+      roe: g("niParent", L) / g("equityParent", L),
+      roic: g("ebit", L) * (1 - t) / invested[L],
+      bvps: g("equityParent", L) / m.sharesMn, eps: g("eps", L),
+      interestCover: g("ebit", L) / g("financeCharges", L),
+      sdMargin: stdev(ebitMargin),
+      posEbitYears: f.ebit.filter(x => x > 0).length,
+      posCfoYears: f.cfo.filter(x => x > 0).length,
+      bookDE: debt[L] / g("equityTotal", L),
+      debtL: debt[L], cashL: g("cash", L), nciL: g("nci", L), revL: g("revenue", L)
+    };
+  }
+
+  function wacc(D, H) {
+    const m = D.market, mcap = m.price * m.sharesMn, debt = H.debtL, de = debt / mcap;
+    const betaL = m.betaU * (1 + (1 - m.tax) * de), ke = m.rf + betaL * m.erp, kd = m.rf + m.kdSpread;
+    const we = mcap / (mcap + debt);
+    return { mcap, debt, de, betaL, ke, kd, kdAT: kd * (1 - m.tax), we, wd: 1 - we, wacc: we * ke + (1 - we) * kd * (1 - m.tax) };
+  }
+
+  function dcf(D, H, W, sc, o = {}) {
+    const t = D.market.tax;
+    const w = o.waccOverride != null ? o.waccOverride : W.wacc + sc.waccAdj;
+    const gT = sc.gTerminal + (o.gAdd || 0);
+    let prev = H.revL;
+    const out = { rev: [], ebitda: [], ebit: [], nopat: [], reinv: [], fcff: [], df: [], pv: [], rnc: [] };
+    for (let i = 0; i < sc.growth.length; i++) {
+      const r = prev * (1 + sc.growth[i] + (o.growthAdd || 0));
+      const em = (o.margin != null ? o.margin : sc.ebitdaMargin[i]) + (o.marginAdd || 0);
+      const e = r * em, ebit = r * (em - sc.daPct[i]), nop = ebit * (1 - t);
+      const s2c = sc.s2c[i] + (o.s2cAdd || 0);
+      const rv = (r - prev) / s2c, fc = nop - rv, df = 1 / Math.pow(1 + w, i + 1);
+      out.rev.push(r); out.ebitda.push(e); out.ebit.push(ebit); out.nopat.push(nop); out.reinv.push(rv);
+      out.fcff.push(fc); out.df.push(df); out.pv.push(fc * df); out.rnc.push(nop / r * s2c);
+      prev = r;
+    }
+    const ronic = w + D.assumptions.ronicPremium;
+    const nopatT1 = out.nopat[out.nopat.length - 1] * (1 + gT), termReinvRate = gT / ronic, fcffT1 = nopatT1 * (1 - termReinvRate);
+    const tv = fcffT1 / (w - gT), pvTV = tv * out.df[out.df.length - 1], sumPV = sum(out.pv), ev = sumPV + pvTV;
+    const equity = ev - H.debtL + H.cashL - H.nciL;
+    return Object.assign(out, { wacc: w, g: gT, ronic, nopatT1, termReinvRate, fcffT1, tv, pvTV, sumPV, ev, equity,
+      vps: equity / D.market.sharesMn, tvShare: pvTV / ev });
+  }
+
+  function relative(D, H) {
+    const m = D.market;
+    const rows = D.peers.map(p => {
+      const mcap = p.price * p.sharesMn;
+      return { ticker: p.ticker, mcap, ev: mcap + p.debt - p.cash,
+        pe: p.eps && p.eps > 0 ? p.price / p.eps : null,
+        pbv: p.bvps && p.bvps > 0 ? p.price / p.bvps : null,
+        evEbitda: p.evEbitda && p.evEbitda > 0 ? p.evEbitda : null,
+        bookDE: p.debt / (p.bvps * p.sharesMn) };
+    });
+    const pe = rows.map(r => r.pe).filter(v => v != null), pbv = rows.map(r => r.pbv).filter(v => v != null),
+      eve = rows.map(r => r.evEbitda).filter(v => v != null);
+    const n = { pe: pe.length, pbv: pbv.length, eve: eve.length }, tot = n.pe + n.pbv + n.eve;
+    const wts = {}; for (const k in n) wts[k] = tot ? n[k] / tot : 0;
+    const eqFromEve = x => (x * H.ebitda[H.L] - H.debtL + H.cashL - H.nciL) / m.sharesMn;
+    const conv = { pe: x => x * H.eps, pbv: x => x * H.bvps, eve: eqFromEve };
+    const series = { pe, pbv, eve }, methods = {};
+    for (const k of ["pe", "pbv", "eve"]) {
+      const xs = series[k];
+      methods[k] = xs.length ? { median: median(xs), min: Math.min(...xs), max: Math.max(...xs), value: conv[k](median(xs)),
+        low: conv[k](Math.min(...xs)), high: conv[k](Math.max(...xs)), n: xs.length, weight: wts[k] }
+        : { median: null, min: null, max: null, value: null, low: null, high: null, n: 0, weight: 0 };
+    }
+    let value = 0; for (const k in methods) if (methods[k].value != null) value += methods[k].value * methods[k].weight;
+    return { rows, methods, value, cvPE: pe.length >= 2 ? stdev(pe) / mean(pe) : null,
+      peerMcapMedian: median(rows.map(r => r.mcap)), peerBookDEMedian: median(rows.map(r => r.bookDE)),
+      peerRevGrowthMedian: median(D.peers.map(p => p.revGrowth)) };
+  }
+
+  function reverse(D, H, W, base) {
+    const price = D.market.price;
+    const v1 = dcf(D, H, W, base, { margin: 0.20 }).vps, v2 = dcf(D, H, W, base, { margin: 0.27 }).vps;
+    const im = 0.20 + (price - v1) * 0.07 / (v2 - v1);
+    let lo = base.gTerminal + 0.005, hi = 0.40;
+    for (let i = 0; i < 200; i++) { const mid = (lo + hi) / 2; if (dcf(D, H, W, base, { waccOverride: mid }).vps > price) lo = mid; else hi = mid; }
+    return { impliedMargin: im, impliedWacc: (lo + hi) / 2, deliveredMargin: H.ebitdaMargin, cushion: H.ebitdaMargin - im };
+  }
+
+  function selector(D, H, W, R, b) {
+    const P = D.profile, A = D.assumptions, peers = D.peers, np = peers.length, fin = !!P.isFinancial;
+    const share = c => peers.filter(c).length / np;
+    const F = [];
+    const close = share(p => p.closeModel);
+    F.push({ id: "F1", name: "Industry & business model", dcf: fin ? 0 : (H.capexIntensity >= A.capexHeavy ? 20 : 15),
+      rel: fin ? 20 : 20 * close, dmax: 20, rmax: 20,
+      evidence: `Net capex / revenue ${pct(H.capexIntensity)}; peers with close business model ${pct(close, 0)}`,
+      rule: `DCF: financial firm 0 | net capex/revenue >= ${pct(A.capexHeavy, 0)} (reinvestment drives value) 20 | else 15. Multiples: financial firm 20 (P/BV standard) | else 20 x share of peers with a close business model.` });
+    const gap = R.peerRevGrowthMedian != null ? Math.abs(H.growth[H.L] - R.peerRevGrowthMedian) : 1;
+    F.push({ id: "F2", name: "Maturity & growth", dcf: (H.posEbitYears === H.n && H.cagr > 0 && H.cagr <= 0.20) ? 20 : 10,
+      rel: gap <= 0.05 ? 20 : (gap <= 0.10 ? 10 : 0), dmax: 20, rmax: 20,
+      evidence: `Revenue CAGR ${pct(H.cagr)}; growth gap to peer median ${pct(gap)}`,
+      rule: "DCF: profitable every year and CAGR between 0% and 20% (forecastable, established) 20 | else 10. Multiples: growth gap to peer median <= 5pp 20 | <= 10pp 10 | else 0." });
+    const sdp = H.sdMargin <= 0.01 ? 10 : (H.sdMargin <= 0.03 ? 5 : 0);
+    const prof = share(p => p.eps > 0), grow = share(p => (p.niGrowth || 0) > 0);
+    F.push({ id: "F3", name: "Profitability & cash-flow stability", dcf: 10 * H.posEbitYears / H.n + sdp, rel: 10 * prof + 10 * grow,
+      dmax: 20, rmax: 20,
+      evidence: `EBIT margin s.d. ${pct(H.sdMargin, 2)}; peers profitable ${pct(prof, 0)}, growing profit ${pct(grow, 0)}`,
+      rule: "DCF: 10 x share of years with positive EBIT + margin s.d. <= 1pp 10 | <= 3pp 5. Multiples: 10 x share of profitable peers + 10 x share of peers with growing profit (depressed peer earnings distort multiples)." });
+    const vd = D.meta.valuationDate, fresh = share(p => daysBetween(p.priceDate, vd) <= A.staleDays), aud = share(p => p.audited);
+    F.push({ id: "F4", name: "Information availability & reliability", dcf: 10 * (P.auditedFS ? 1 : 0) + 10 * (P.guidance ? 1 : 0),
+      rel: 10 * aud + 10 * fresh, dmax: 20, rmax: 20,
+      evidence: `Audited FS ${P.auditedFS ? "yes" : "no"}, guidance ${P.guidance ? "yes" : "no"}; peers audited ${pct(aud, 0)}, fresh prices ${pct(fresh, 0)}`,
+      rule: `DCF: audited statements 10 + management guidance/consensus 10. Multiples: 10 x share of audited peers + 10 x share of peer prices within ${A.staleDays} days.` });
+    const nbest = Math.max(...Object.values(R.methods).map(x => x.n)), size = W.mcap / R.peerMcapMedian;
+    F.push({ id: "F5", name: "Availability of suitable peers", dcf: 0,
+      rel: (nbest >= 5 ? 10 : (nbest >= 3 ? 5 : 0)) + (size <= 3 ? 10 : (size <= 10 ? 5 : 0)), dmax: 0, rmax: 20,
+      evidence: `Best-covered multiple has ${nbest} peers; the company is ${size.toFixed(0)}x the median peer size`,
+      rule: "Multiples only: peers on best-covered multiple >= 5 10 | >= 3 5 | else 0; size ratio <= 3x 10 | <= 10x 5 | else 0." });
+    const degap = Math.abs(H.bookDE - R.peerBookDEMedian);
+    F.push({ id: "F6", name: "Capital structure & financial-sector fit", dcf: fin ? 0 : (W.de <= 1.5 ? 20 : 10),
+      rel: degap <= 0.5 ? 20 : (degap <= 1.0 ? 10 : 0), dmax: 20, rmax: 20,
+      evidence: `Market D/E ${W.de.toFixed(2)}; book D/E ${H.bookDE.toFixed(2)} vs peer median ${R.peerBookDEMedian.toFixed(2)}; financial firm: ${fin ? "yes" : "no"}`,
+      rule: "DCF (FCFF): financial firm 0 (debt is raw material, use FCFE/DDM) | market D/E <= 1.5 20 | else 10. Multiples: book D/E gap to peers <= 0.5 20 | <= 1.0 10 | else 0 (leverage distorts P/E and P/BV)." });
+    const cv = R.cvPE;
+    F.push({ id: "F7", name: "Robustness of the result", dcf: b.tvShare <= 0.60 ? 20 : (b.tvShare <= 0.80 ? 10 : 0),
+      rel: cv == null ? 0 : (cv <= 0.30 ? 20 : (cv <= 0.60 ? 10 : 0)), dmax: 20, rmax: 20,
+      evidence: `Terminal value ${pct(b.tvShare, 0)} of EV; P/E dispersion CV ${cv == null ? "n/a" : cv.toFixed(2)}`,
+      rule: "DCF: terminal value <= 60% of EV 20 | <= 80% 10 | else 0. Multiples: P/E coefficient of variation <= 0.30 20 | <= 0.60 10 | else 0." });
+    const sd = sum(F.map(x => x.dcf)), sr = sum(F.map(x => x.rel)), md = sum(F.map(x => x.dmax)), mr = sum(F.map(x => x.rmax));
+    const fd = sd / md, fr = sr / mr, wd = fin ? 0 : (fd + fr > 0 ? fd / (fd + fr) : 0.5);
+    return { factors: F, scoreDCF: sd, scoreREL: sr, maxDCF: md, maxREL: mr, fitDCF: fd, fitREL: fr, wDCF: wd, wREL: 1 - wd,
+      primary: wd >= 0.6 ? "DCF-led" : (wd <= 0.4 ? "Multiples-led" : "Balanced") };
+  }
+
+  function checks(D, H, W, R, S, dcfs) {
+    const m = D.market, f = D.financials, A = D.assumptions, L = H.L, C = [];
+    const add = (id, name, severity, ok, detail) => C.push({ id, name, severity, ok: !!ok, detail });
+    const req = ["price", "sharesMn", "rf", "erp", "betaU", "tax", "kdSpread"].map(k => m[k]);
+    const reqf = ["revenue", "ebit", "da", "netIncome", "niParent", "eps", "capex", "totalAssets", "totalLiabilities",
+      "equityTotal", "equityParent", "nci", "cash", "bankLoans"].map(k => f[k][L]);
+    const miss = req.concat(reqf).filter(x => !isNum(x)).length;
+    add("C01", "Required inputs present", "ERROR", miss === 0 && D.peers.length > 0, `${miss} missing required inputs; ${D.peers.length} peers`);
+    const unitOk = m.price > 0 && m.sharesMn >= 100 && m.sharesMn <= 100000 && m.rf > 0 && m.rf < 0.5 && m.erp > 0 && m.erp < 0.5
+      && m.tax >= 0 && m.tax < 0.5 && m.betaU >= 0.2 && m.betaU <= 3;
+    add("C02", "Units & ranges of market inputs", "ERROR", unitOk, "Price > 0, shares in million (100-100,000), rates as decimals");
+    const epsCalc = f.niParent[L] / m.sharesMn;
+    add("C03", "Share count consistent with EPS", "ERROR", Math.abs(epsCalc / f.eps[L] - 1) <= 0.05,
+      `Profit to parent / shares = ${epsCalc.toFixed(1)} vs reported EPS ${f.eps[L]}`);
+    const bs = Math.max(...f.years.map((_, i) => Math.abs(f.totalAssets[i] - f.totalLiabilities[i] - f.equityTotal[i]) / f.totalAssets[i]));
+    add("C04", "Balance sheet balances (A = L + E)", "ERROR", bs <= 0.005, `Max gap ${pct(bs, 3)} of assets`);
+    const sc = Object.values(A.scenarios), gmax = Math.max(...sc.map(s => s.gTerminal));
+    add("C05", "Terminal growth below risk-free rate", "ERROR", gmax < m.rf, `Highest g ${pct(gmax, 2)} vs Rf ${pct(m.rf, 2)}`);
+    const gw = Math.min(...Object.values(dcfs).map(d => d.wacc - d.g));
+    add("C06", "Terminal growth at least 1pp below WACC", "ERROR", gw >= 0.01, `Smallest WACC - g spread ${pct(gw, 2)}`);
+    add("C07", "Terminal growth within long-run GDP cap", "WARN", gmax <= A.maxG, `Highest g ${pct(gmax, 2)} vs cap ${pct(A.maxG, 0)}`);
+    const sane = sc.every(s => s.ebitdaMargin.every(x => x > 0 && x < 1) && s.daPct.every((x, i) => x < s.ebitdaMargin[i]) && s.s2c.every(x => x > 0));
+    add("C08", "Forecast drivers valid (0 < margin < 1, D&A < EBITDA, S/C > 0)", "ERROR", sane, "All scenarios");
+    const ps = sum(sc.map(s => s.probability));
+    add("C09", "Scenario probabilities sum to 100%", "ERROR", Math.abs(ps - 1) < 1e-9, `Sum ${pct(ps, 0)}`);
+    const bad = D.peers.filter(p => !(p.eps && p.eps > 0)).map(p => p.ticker);
+    add("C10", "Invalid multiples excluded (negative earnings)", "WARN", !bad.length, bad.length ? "Excluded from P/E: " + bad.join(", ") : "None");
+    const thin = Object.entries(R.methods).filter(([, v]) => v.n > 0 && v.n < 3).map(([k]) => k.toUpperCase());
+    add("C11", "Each used multiple has >= 3 peers", "WARN", !thin.length, thin.length ? "Thin: " + thin.join(", ") : "OK");
+    const b = dcfs.base;
+    const rec1 = Math.abs(b.sumPV + b.pvTV - b.ev) < 1e-6 && Math.abs(b.ev - H.debtL + H.cashL - H.nciL - b.equity) < 1e-6;
+    const mev = W.mcap + H.debtL - H.cashL + H.nciL, rec2 = Math.abs(mev - H.debtL + H.cashL - H.nciL - W.mcap) < 1e-6;
+    add("C12", "Enterprise-to-equity reconciliation (DCF and market)", "ERROR", rec1 && rec2,
+      "EV = PV(FCFF) + PV(TV); Equity = EV - debt + cash - NCI; market EV bridges back to market cap");
+    add("C13", "Scenario values ordered Bear <= Base <= Bull", "WARN", dcfs.bear.vps <= dcfs.base.vps && dcfs.base.vps <= dcfs.bull.vps, "DCF value per share");
+    add("C14", "WACC within plausible range (6%-20%)", "WARN", W.wacc >= 0.06 && W.wacc <= 0.20, `WACC ${pct(W.wacc, 2)}`);
+    add("C15", "Terminal value share of EV <= 80%", "WARN", b.tvShare <= 0.80, `TV share ${pct(b.tvShare, 0)}`);
+    const vd = D.meta.valuationDate, stale = D.peers.filter(p => daysBetween(p.priceDate, vd) > A.staleDays).map(p => p.ticker);
+    if (daysBetween(m.priceDate, vd) > A.staleDays) stale.push(D.meta.ticker);
+    add("C16", "Prices current vs valuation date", "WARN", !stale.length, stale.length ? "Stale: " + stale.join(", ") : `All within ${A.staleDays} days`);
+    add("C17", "Method weights sum to 100%", "ERROR", Math.abs(S.wDCF + S.wREL - 1) < 1e-9 &&
+      Math.abs(sum(Object.values(R.methods).map(v => v.weight)) - 1) < 1e-9, "Selector and relative weights");
+    return C;
+  }
+
+  function recommend(D, H, W, R, S, dcfs, rev, C) {
+    const A = D.assumptions, price = D.market.price, sc = A.scenarios, bl = {};
+    for (const k in sc) bl[k] = S.wDCF * dcfs[k].vps + S.wREL * R.value;
+    const vals = Object.values(bl), central = bl.base, low = Math.min(...vals), high = Math.max(...vals);
+    let pw = 0; for (const k in sc) pw += sc[k].probability * bl[k];
+    const up = central / price - 1;
+    const errors = C.filter(c => c.severity === "ERROR" && !c.ok).length, warnings = C.filter(c => c.severity === "WARN" && !c.ok).length;
+    const sig = up >= A.buy ? "BUY" : (up <= A.sell ? "SELL" : "HOLD");
+    const gap = Math.abs(dcfs.base.vps - R.value) / ((dcfs.base.vps + R.value) / 2);
+    const pos = price < low ? "below range" : (price > high ? "above range" : "inside range");
+    const im = rev.impliedMargin, cm = rev.deliveredMargin;
+    const rv = sig === "BUY" ? im < cm : (sig === "SELL" ? im > cm : Math.abs(im - cm) <= A.reverseTol);
+    const criteria = [
+      { id: "K1", name: `Methods agree (gap <= ${pct(A.agreeHigh, 0)})`, ok: gap <= A.agreeHigh, detail: `DCF vs multiples gap ${pct(gap)}` },
+      { id: "K2", name: "Price position confirms the signal", ok: (sig === "BUY" && pos === "below range") || (sig === "SELL" && pos === "above range") || (sig === "HOLD" && pos === "inside range"),
+        detail: `Price is ${pos} (${(D.meta && D.meta.currency) || ""} ${fmt0(low)} - ${fmt0(high)})` },
+      { id: "K3", name: "Reverse DCF confirms the signal", ok: rv, detail: `Implied EBITDA margin ${pct(im)} vs delivered ${pct(cm)}` },
+      { id: "K4", name: "No validation warnings", ok: warnings === 0, detail: `${warnings} warning(s)` }
+    ];
+    const k = criteria.filter(c => c.ok).length;
+    const conviction = gap > A.agreeLow ? "Low" : (k >= 3 ? "High" : (k >= 2 ? "Medium" : "Low"));
+    return { blended: bl, central, low, high, probWeighted: pw, upside: up, upsideLow: low / price - 1, upsideHigh: high / price - 1,
+      signal: sig, final: errors ? "SUSPENDED" : sig, errors, warnings, gap, pricePosition: pos, criteria, criteriaMet: k, conviction };
+  }
+
+  function sensitivity(D, H, W, R, S, base) {
+    const b = dcf(D, H, W, base);
+    const waccs = [-0.02, -0.01, 0, 0.01, 0.02].map(x => b.wacc + x), gs = [-0.01, -0.005, 0, 0.005, 0.01].map(x => base.gTerminal + x);
+    const grid = waccs.map(w => gs.map(g => dcf(D, H, W, base, { waccOverride: w, gAdd: g - base.gTerminal }).vps));
+    const blend = (dv, rv = R.value) => S.wDCF * dv + S.wREL * rv;
+    const V = o => dcf(D, H, W, base, o).vps;
+    const T = [];
+    const tor = (driver, lo, hi, lowLabel, highLabel) => T.push({ driver, low: lo, high: hi, lowLabel, highLabel, swing: Math.abs(hi - lo) });
+    tor("WACC +/-1pp", blend(V({ waccOverride: b.wacc + 0.01 })), blend(V({ waccOverride: b.wacc - 0.01 })), "+1pp", "-1pp");
+    tor("EBITDA margin +/-2pp", blend(V({ marginAdd: -0.02 })), blend(V({ marginAdd: 0.02 })), "-2pp", "+2pp");
+    tor("Revenue growth +/-3pp", blend(V({ growthAdd: 0.03 })), blend(V({ growthAdd: -0.03 })), "+3pp", "-3pp");
+    tor("Sales-to-capital +/-0.2", blend(V({ s2cAdd: -0.2 })), blend(V({ s2cAdd: 0.2 })), "-0.2", "+0.2");
+    tor("Terminal growth +/-0.5pp", blend(V({ gAdd: -0.005 })), blend(V({ gAdd: 0.005 })), "-0.5pp", "+0.5pp");
+    tor("Peer multiples +/-20%", blend(b.vps, R.value * 0.8), blend(b.vps, R.value * 1.2), "-20%", "+20%");
+    for (const t of T) if (t.low > t.high) { [t.low, t.high] = [t.high, t.low]; [t.lowLabel, t.highLabel] = [t.highLabel, t.lowLabel]; }
+    T.sort((p, q) => q.swing - p.swing);
+    return { waccs, gs, grid, tornado: T, center: blend(b.vps) };
+  }
+
+  function valuate(D) {
+    const H = historicals(D), W = wacc(D, H), sc = D.assumptions.scenarios, dcfs = {};
+    for (const k in sc) dcfs[k] = dcf(D, H, W, sc[k]);
+    const R = relative(D, H), rev = reverse(D, H, W, sc.base), S = selector(D, H, W, R, dcfs.base);
+    const C = checks(D, H, W, R, S, dcfs), REC = recommend(D, H, W, R, S, dcfs, rev, C), SEN = sensitivity(D, H, W, R, S, sc.base);
+    return { hist: H, wacc: W, dcf: dcfs, relative: R, reverse: rev, selector: S, checks: C, rec: REC, sens: SEN };
+  }
+
+  const api = { valuate, dcf, historicals, wacc, relative, median, daysBetween };
+  if (typeof module !== "undefined" && module.exports) module.exports = api; else root.BirdEngine = api;
+})(typeof window !== "undefined" ? window : this);
+</script>
+<script>
+const DEFAULT_DATA = {"meta":{"company":"PT Blue Bird Tbk","ticker":"BIRD","exchange":"IDX","currency":"IDR","units":"IDR million unless stated; per-share figures in IDR; shares in million","valuationDate":"2026-10-23","dataVersion":"1.0","lastUpdated":{"market":"2026-10-23T14:48+07:00","financials":"2026-10-17T12:30+07:00","peers":"2026-10-23T14:45+07:00","assumptions":"2026-10-23T15:00+07:00"}},"profile":{"industry":"Land transportation - taxi and car rental (IDX-IC K: Transportation & Logistics)","businessModel":"Asset-heavy fleet operator: buys vehicles, runs them ~5-7 years, sells them used","isFinancial":false,"auditedFS":true,"guidance":true},"market":{"price":1480,"priceDate":"2026-10-23","sharesMn":2502.1,"rf":0.07189,"erp":0.0669,"betaU":0.71,"betaReg":0.49,"tax":0.22,"kdSpread":0.01},"marketSources":{"price":"Ajaib / akufrugal.com quote, IDR 1,480, 23 Oct 2026 14:48 WIB (intraday)","sharesMn":"PT Blue Bird Tbk Annual & Sustainability Report 2025 (audited consolidated FS), Note 19: 2,502,100,000 shares","rf":"BRIDS Daily Economic & Fixed Income Update, 7 Oct 2026: INDOGB 10Y 7.189%","erp":"Damodaran, Country Risk Premiums, Jan 2026: Indonesia total ERP 6.69%","betaU":"Damodaran, Betas by Sector, Jan 2026: Transportation, unlevered & cash-corrected 0.71","betaReg":"TradingView IDX:BIRD 1-year beta 0.49 (cross-check only; thin trading)","tax":"PT Blue Bird Tbk Annual & Sustainability Report 2025 (audited consolidated FS): effective rate FY2025 22.0% = statutory 22%","kdSpread":"Assumption: ~1% spread; interest cover 6.6x = investment-grade range (Damodaran synthetic rating)"},"financials":{"years":["2023","2024","2025"],"source":"PT Blue Bird Tbk Annual & Sustainability Report 2025 (audited consolidated FS)","revenue":[4422472,5039947,5705306],"ebit":[540956,634104,687375],"da":[null,548999,651249],"otherIncome":[54140,121514,137339],"financeCharges":[null,68599,103370],"pbt":[595096,755618,824714],"taxExpense":[132028,162919,181303],"netIncome":[463068,592699,643411],"niParent":[452970,585195,635837],"eps":[181,234,254],"cfo":[1091241,1058660,1255919],"capex":[null,1369013,2098986],"disposalProceeds":[null,456315,507677],"totalAssets":[7580224,8440955,9651949],"totalLiabilities":[1948786,2445967,3325713],"equityTotal":[5631438,5994988,6326236],"equityParent":[5520218,5880727,6208396],"nci":[111220,114261,117840],"cash":[983434,1161954,1343250],"bankLoans":[null,1360399,2263803],"leases":[null,2311,10657],"opNWC":[null,-60966,156544],"dividends":[null,227691,300252]},"peers":[{"ticker":"WEHA","name":"PT WEHA Transportasi Indonesia Tbk","price":97,"sharesMn":1460.554819,"eps":13.88,"bvps":179.82,"revGrowth":0.04,"niGrowth":-0.21,"debt":111700,"cash":17440,"evEbitda":2.87,"audited":false,"closeModel":true,"source":"stockanalysis.com (not verified against an annual report); price akufrugal 23 Oct 2026","priceDate":"2026-10-23"},{"ticker":"LRNA","name":"PT Eka Sari Lorena Transport Tbk","price":195,"sharesMn":350.000022,"eps":-66.09,"bvps":762.12,"revGrowth":null,"niGrowth":null,"debt":36738.0792,"cash":527.79,"evEbitda":null,"audited":true,"closeModel":false,"source":"FY2025 annual report (debt = total liabilities proxy); price akufrugal 23 Oct 2026","priceDate":"2026-10-23"},{"ticker":"BPTR","name":"PT Batavia Prosperindo Trans Tbk","price":62,"sharesMn":3534.0,"eps":10.14,"bvps":171.15,"revGrowth":0.143,"niGrowth":-0.117,"debt":1551646.6527,"cash":43029.6862,"evEbitda":null,"audited":true,"closeModel":true,"source":"FY2025 annual report; price akufrugal 23 Oct 2026","priceDate":"2026-10-23"},{"ticker":"JAYA","name":"PT Armada Berjaya Trans Tbk","price":132,"sharesMn":798.499394,"eps":5.62,"bvps":155.66,"revGrowth":-0.27,"niGrowth":-0.27,"debt":72489.9368,"cash":2613.6749,"evEbitda":null,"audited":true,"closeModel":false,"source":"FY2025 annual report; price akufrugal 23 Oct 2026","priceDate":"2026-10-23"}],"assumptions":{"forecastYears":["2026","2027","2028","2029","2030"],"scenarios":{"bear":{"label":"Bear","probability":0.25,"growth":[0.09,0.075,0.065,0.055,0.045],"ebitdaMargin":[0.215,0.215,0.215,0.215,0.215],"daPct":[0.114,0.114,0.114,0.114,0.114],"s2c":[0.85,0.85,0.85,0.85,0.85],"gTerminal":0.045,"waccAdj":0.005},"base":{"label":"Base","probability":0.5,"growth":[0.133,0.107,0.09,0.075,0.06],"ebitdaMargin":[0.235,0.235,0.235,0.235,0.235],"daPct":[0.114,0.114,0.114,0.114,0.114],"s2c":[1.0,1.0,1.0,1.0,1.0],"gTerminal":0.05,"waccAdj":0.0},"bull":{"label":"Bull","probability":0.25,"growth":[0.15,0.125,0.105,0.085,0.065],"ebitdaMargin":[0.25,0.25,0.25,0.25,0.25],"daPct":[0.114,0.114,0.114,0.114,0.114],"s2c":[1.2,1.2,1.2,1.2,1.2],"gTerminal":0.055,"waccAdj":-0.005}},"ronicPremium":0.0,"buy":0.15,"sell":-0.15,"agreeHigh":0.2,"agreeLow":0.4,"reverseTol":0.02,"capexHeavy":0.15,"maxG":0.06,"staleDays":30},"assumptionSources":{"growth":"Base 2026-27 = analyst consensus revenue (MarketScreener, 3 analysts); fades to 6% by 2030. Bear = 2026 capex guidance low end / slower fleet growth; Bull = top of +3,000 net fleet units.","ebitdaMargin":"Base = FY2024-25 delivered 23.5%; Bear -2pp (fuel/EV transition cost); Bull +1.5pp (utilisation, EV opex savings).","daPct":"FY2025 D&A 651,249 / revenue 5,705,306 = 11.4% (Note 10)","s2c":"Revenue added per IDR 1 of net new capital. FY2024-25 marginal 0.84 (Bear 0.85); Base 1.0; Bull 1.2 (2026 capex guidance IDR 1.5-1.9tn).","gTerminal":"Below Rf 7.2% and below long-run Indonesian nominal GDP growth (~5-6%).","waccAdj":"Scenario risk overlay on WACC: Bear +0.5pp, Bull -0.5pp.","ronicPremium":"Terminal new capital earns its cost of capital (stable-growth convention).","consensus":"MarketScreener (accessed 17 Oct 2026): revenue 2026E IDR 6,466bn, 2027E 7,160bn; avg. target IDR 2,173."}};
+const PY_REFERENCE = [["wacc.wacc",0.11236286109421087],["wacc.ke",0.14214474164220972],["wacc.betaL",1.0501456149807133],["hist.ebitda.2",1338624],["hist.reinv.2",1157570],["hist.fcff.2",-621417.5],["hist.cagr",0.1358132357489974],["hist.roic",0.07387619556521674],["dcf.bear.vps",894.7616009981172],["dcf.base.vps",1520.9753722583084],["dcf.bull.vps",2250.4415863271797],["dcf.base.ev",4854682.478927514],["dcf.base.equity",3805632.4789275136],["dcf.base.tv",7838695.30764184],["dcf.base.tvShare",0.9480921509957013],["dcf.base.fcff.0",-148722.83594275988],["dcf.base.fcff.4",335749.88560920826],["dcf.base.sumPV",251996.12507998373],["relative.value",1364.5059398353299],["relative.methods.pe.median",6.988472622478386],["relative.methods.pe.value",1775.07204610951],["relative.methods.pbv.median",0.45084182439328996],["relative.methods.pbv.value",1118.6621554678086],["relative.methods.eve.value",1116.1827584828745],["relative.cvPE",0.8024912166093405],["reverse.impliedMargin",0.23328682563718792],["reverse.impliedWacc",0.11401463663048306],["selector.scoreDCF",100.0],["selector.scoreREL",70.0],["selector.wDCF",0.625],["selector.primary","DCF-led"],["rec.central",1462.2993350996915],["rec.low",1070.915728062072],["rec.high",1918.2157188927358],["rec.probWeighted",1478.4325292885478],["rec.upside",-0.011959908716424716],["rec.gap",0.10845291686151866],["rec.signal","HOLD"],["rec.final","HOLD"],["rec.conviction","High"],["rec.errors",0],["rec.warnings",3],["sens.grid.0.0",2120.3297467486505],["sens.grid.4.4",1112.821693742195],["sens.tornado.0.low",1163.3267586083416],["sens.tornado.0.high",1761.2719115910418]];
+const APP_VERSION = "1.0 (Oct 2026)";
+</script>
+<script>
+"use strict";
+/* ---------------- state ---------------- */
+const clone = o => JSON.parse(JSON.stringify(o));
+let D = clone(DEFAULT_DATA), R = null, calcError = null, missing = [], calcAt = null, view = "dashboard", activeSc = "base";
+const STORE_KEY = "bird-valuation-draft-v1";
+const VIEWS = [
+  ["Results", [["dashboard","Dashboard"],["recommendation","Recommendation"]]],
+  ["Inputs", [["inputs","Market & company"],["financials","Financial history"],["peers","Peer data"],["assumptions","Forecast & scenarios"],["rules","Decision rules"]]],
+  ["Valuation", [["market","Market value"],["dcf","DCF"],["relative","Relative valuation"],["selector","Method selection"],["sensitivity","Scenarios & sensitivity"]]],
+  ["Control", [["checks","Validation checks"],["data","Import & export"],["guide","User guide"],["about","Method & AI disclosure"]]]
+];
+
+/* ---------------- formatting ---------------- */
+const isNum = v => typeof v === "number" && Number.isFinite(v);
+const f0 = v => !isNum(v) ? "–" : (Math.abs(v) < 100 ? v.toLocaleString("en-US",{maximumFractionDigits:2}) : Math.round(v).toLocaleString("en-US"));   // small per-share prices keep decimals
+const f1 = v => isNum(v) ? v.toLocaleString("en-US",{minimumFractionDigits:1,maximumFractionDigits:1}) : "–";
+const f2 = v => isNum(v) ? v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}) : "–";
+const bn = v => isNum(v) ? Math.round(v/1000).toLocaleString("en-US") : "–";      // IDR mn -> IDR bn
+const p1 = v => isNum(v) ? (v*100).toFixed(1)+"%" : "–";
+const p0 = v => isNum(v) ? (v*100).toFixed(0)+"%" : "–";
+const p2 = v => isNum(v) ? (v*100).toFixed(2)+"%" : "–";
+const sp1 = v => isNum(v) ? (v>=0?"+":"−")+Math.abs(v*100).toFixed(1)+"%" : "–";
+const mx = v => isNum(v) ? v.toFixed(2)+"x" : "n/m";
+const CUR = () => (D.meta && D.meta.currency) || "IDR";
+const TK = () => (D.meta && D.meta.ticker) || "Company";
+const CO = () => (D.meta && D.meta.company) || "Company";
+const fileTK = () => (TK().replace(/[^A-Za-z0-9]+/g, "") || "Company");
+/* ---------- external data sources (links open in a new tab; no automatic download) ---------- */
+const YSFX = {IDX:".JK", BEI:".JK", NYSE:"", NASDAQ:"", AMEX:"", LSE:".L", XETRA:".DE", FWB:".F", SGX:".SI", ASX:".AX", HKEX:".HK", TSE:".T", BIST:".IS", SET:".BK", KLSE:".KL", BURSA:".KL", NSE:".NS", BSE:".BO", SIX:".SW", TSX:".TO", EURONEXT:".PA"};
+const ySym = (t, ex) => { const x = String(ex || D.meta.exchange || "").trim().toUpperCase(); const tk = String(t || "").trim().toUpperCase(); return tk ? tk + (YSFX[x] ?? "") : ""; };
+const isIDX = ex => ["IDX","BEI"].includes(String(ex || D.meta.exchange || "").trim().toUpperCase());
+function srcLinks(t, ex, full){
+  const y = encodeURIComponent(ySym(t, ex)), tk = encodeURIComponent(String(t || "").trim().toUpperCase()); if (!y) return "";
+  const a = (href, label) => `<a class="btn small-btn" href="${href}" target="_blank" rel="noopener">${label}</a>`;
+  const out = [a(`https://finance.yahoo.com/quote/${y}/`, full ? "Yahoo quote" : "Yahoo")];
+  if (full) out.push(a(`https://finance.yahoo.com/quote/${y}/key-statistics/`, "Yahoo statistics"), a(`https://finance.yahoo.com/quote/${y}/financials/`, "Income statement"), a(`https://finance.yahoo.com/quote/${y}/balance-sheet/`, "Balance sheet"), a(`https://finance.yahoo.com/quote/${y}/cash-flow/`, "Cash flow"));
+  if (isIDX(ex)) { out.push(a(`https://www.idx.co.id/id/perusahaan-tercatat/profil-perusahaan-tercatat/${tk}`, "IDX"), a(`https://stockbit.com/symbol/${tk}`, "Stockbit")); if (full) out.push(a(`https://www.idx.co.id/id/perusahaan-tercatat/laporan-keuangan-dan-tahunan/`, "IDX financial reports")); }
+  return `<span class="row src-links" style="gap:6px">${out.join("")}</span>`;
+}
+const HINT = {price:"Yahoo quote → previous close", sharesMn:"Yahoo statistics → shares outstanding, or the annual report (in million)",
+  rf:"10-year government bond yield of the company's country", erp:"Damodaran → Country Risk Premiums (total equity risk premium)",
+  betaU:"Damodaran → Betas by Sector → unlevered beta corrected for cash", betaReg:"Yahoo quote → Beta (5Y monthly), cross-check only",
+  tax:"Annual report: income tax ÷ profit before tax, or the statutory rate", kdSpread:"Interest cover → synthetic rating spread (Damodaran)"};
+const FIN_Y = {revenue:"Total Revenue", ebit:"Operating Income", da:"Depreciation & Amortization (cash flow)", otherIncome:"Other Income/Expense",
+  financeCharges:"Interest Expense", pbt:"Pretax Income", taxExpense:"Tax Provision", netIncome:"Net Income incl. minority interests",
+  niParent:"Net Income Common Stockholders", eps:"Basic EPS", cfo:"Operating Cash Flow", capex:"Capital Expenditure (as positive)",
+  disposalProceeds:"Sale of PPE", dividends:"Cash Dividends Paid", totalAssets:"Total Assets", totalLiabilities:"Total Liabilities Net Minority Interest",
+  equityTotal:"Total Equity Gross Minority Interest", equityParent:"Stockholders' Equity", nci:"Minority Interest", cash:"Cash And Cash Equivalents",
+  bankLoans:"Total Debt minus lease liabilities", leases:"Annual report: lease liabilities", opNWC:"Annual report: operating current assets − operating current liabilities"};
+/* ---------- local data connector (data_connector.py on the user's computer fetches Yahoo / IDX) ---------- */
+/* The connector is either the server that delivered this page (hosted website) or a local one on 127.0.0.1:8765. */
+const LOCAL_CONN = "http://127.0.0.1:8765";
+let CONN = LOCAL_CONN, connHosted = false;
+let conn = {state:"unknown", info:null, results:[], busy:false, out:"", dm:null, ind:null};
+async function connGet(path, ms){
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms || 4000);
+  try { const r = await fetch(CONN + path, {signal: ctl.signal, cache: "no-store"}); const j = await r.json(); if (!r.ok) throw new Error(j.error || ("HTTP " + r.status)); return j; }
+  finally { clearTimeout(t); }
+}
+async function connCheck(auto){
+  const web = /^https?:$/.test(location.protocol), local = ["127.0.0.1","localhost"].includes(location.hostname);
+  const tries = !web ? [LOCAL_CONN] : (auto && !local ? [location.origin] : [location.origin, LOCAL_CONN]);
+  conn.info = null; conn.state = "off";
+  for (const base of tries) {
+    CONN = base;
+    try { const h = await connGet("/health", 3000); if (h && h.ok) { conn.info = h; conn.state = "on"; connHosted = base !== LOCAL_CONN; break; } } catch(e) {}
+  }
+  if (conn.state !== "on") CONN = LOCAL_CONN;
+  connRender();
+}
+function connRender(){ const el = document.getElementById("conn-panel"); if (el) el.outerHTML = connPanel(); }
+function connPanel(){
+  const st = conn.state === "checking" ? `<span class="pill">Checking…</span>`
+    : conn.state === "on" ? `<span class="pill ok">Connected</span> <span class="small muted">${connHosted ? "Data service of this website" : "Local connector"} · Yahoo Finance on · IDX filings ${conn.info && conn.info.idx ? "on" : "off"} · Damodaran on</span>`
+    : conn.state === "off" ? `<span class="pill warn">Not connected</span> <span class="small muted">Start <code>python3 data_connector.py</code> on this computer and open the offline file <code>valuation_platform.html</code>; the online link cannot reach your computer.</span>`
+    : `<span class="pill">Not checked</span>`;
+  const peers = D.peers.map(p => p.ticker).filter(Boolean).join(" ");
+  const res = conn.results.length ? `<div class="tbl-wrap" style="margin-top:8px;max-height:260px;overflow:auto"><table class="tbl"><thead><tr><th>Ticker</th><th>Company</th><th>Exchange</th><th></th></tr></thead><tbody>${conn.results.map((r,i) => `<tr><td><b>${esc(r.ticker)}</b></td><td>${esc(r.name)}</td><td>${esc(r.exchange||"")}</td><td style="white-space:nowrap"><button class="ghost" data-act="conn-use" data-i="${i}">Value this company</button> <button class="ghost" data-act="conn-peer" data-i="${i}">Add as peer</button></td></tr>`).join("")}</tbody></table></div>` : "";
+  return `<div class="panel" id="conn-panel"><h3>Fetch data automatically</h3>
+    <div class="row" style="gap:8px">${st}<button class="ghost" data-act="conn-check">${conn.state === "unknown" ? "Check connector" : "Check again"}</button></div>
+    <div class="form-grid" style="margin-top:10px">
+      <div class="field"><label>Search company <span class="unit">(name or ticker)</span></label><div class="row" style="gap:6px"><input id="conn-q" placeholder="e.g. Blue Bird, Astra, TLKM" aria-label="Search company" style="flex:1 1 160px"><button data-act="conn-search" ${conn.state !== "on" ? "disabled" : ""}>Search</button></div></div>
+      <div class="field"><label>Company to value</label><input id="conn-t" value="${esc(D.meta.ticker || "")}" aria-label="Ticker to fetch"><div class="src">Exchange ${esc(D.meta.exchange || "IDX")} · valuation date ${esc(D.meta.valuationDate || "")}</div></div>
+      <div class="field"><label>Peers <span class="unit">(tickers, space-separated)</span></label><input id="conn-peers" value="${esc(peers)}" aria-label="Peer tickers"></div>
+      <div class="field"><label>Financial statements from</label><select id="conn-fin" aria-label="Source of financial statements"><option value="idx" ${isIDX() ? "selected" : ""}>IDX audited filings (gaps from Yahoo)</option><option value="yahoo" ${isIDX() ? "" : "selected"}>Yahoo Finance</option></select></div>
+    </div>
+    <div class="row" style="gap:8px;margin-top:10px"><button class="primary" data-act="conn-fetch" ${conn.state !== "on" || conn.busy ? "disabled" : ""}>${conn.busy ? "Fetching… (up to a minute)" : "Fetch data and recalculate"}</button>
+      <span class="small muted">Fills Market & company, Financial history and Peer data. Cost-of-capital inputs are then suggested below (Damodaran) and the forecast on the Forecast tab; you decide what to apply.</span></div>
+    ${res}<div id="conn-out" style="margin-top:8px">${conn.out}</div>${suggPanel()}</div>`;
+}
+/* ---- suggested market inputs from Damodaran (delivered by the connector) ---- */
+function marketSugg(){
+  const dm = conn.dm; if (!dm) return [];
+  const rows = [], F = D.financials, n = F.years.length - 1;
+  if (isNum(dm.rf)) rows.push({k:"rf", label:"Risk-free rate", v:dm.rf, src:dm.rfSource, fmt:p2});
+  if (isNum(dm.erp)) rows.push({k:"erp", label:"Equity risk premium", v:dm.erp, src:`${dm.countrySource} – total equity risk premium`, fmt:p2});
+  if (dm.industries && dm.industries.length) { const ind = conn.ind || dm.suggestedIndustry; const b = dm.industries.find(i => i.name === ind);
+    if (b) rows.push({k:"betaU", label:"Unlevered beta", v:b.betaU, src:`${dm.betaSource}: ${ind}`, fmt:f2}); }
+  if (dm.ratings && dm.ratings.length) { const ebit = F.ebit[n], int = F.financeCharges[n];
+    if (isNum(ebit)) { const cov = isNum(int) && int > 0 ? ebit / int : Infinity;
+      const r = isFinite(cov) ? dm.ratings.find(x => cov > x.lo && cov <= x.hi) : dm.ratings.reduce((a,b) => b.hi > a.hi ? b : a);
+      if (r) rows.push({k:"kdSpread", label:"Debt spread over Rf", v:r.spread, src:`${dm.ratingSource}: interest cover FY${F.years[n]} ${isFinite(cov) ? cov.toFixed(2)+"x" : "n/a (no interest expense)"} → rating ${r.rating}`, fmt:p2}); } }
+  if (isNum(dm.tax)) rows.push({k:"tax", label:"Tax rate (statutory)", v:dm.tax, src:`${dm.countrySource} – marginal corporate tax rate`, fmt:p2});
+  return rows;
+}
+function suggPanel(){
+  const dm = conn.dm; if (!dm) return "";
+  const rows = marketSugg(), ind = conn.ind || dm.suggestedIndustry;
+  const sel = dm.industries ? `<div class="field" style="max-width:420px"><label>Industry for the unlevered beta <span class="unit">(${esc(dm.betaFile||"")}; suggested from Yahoo: ${esc(dm.suggestedIndustry||"")})</span></label><select id="conn-ind" aria-label="Damodaran industry">${dm.industries.map(i => `<option ${i.name === ind ? "selected" : ""}>${esc(i.name)}</option>`).join("")}</select></div>` : "";
+  return `<div style="margin-top:12px"><div class="eyebrow">Suggested market inputs (Damodaran${dm.country ? ", " + esc(dm.country) : ""})</div>${sel}
+    <div class="tbl-wrap" style="margin-top:6px"><table class="tbl"><thead><tr><th></th><th>Input</th><th class="n">Current</th><th class="n">Suggested</th><th>Source / derivation</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td><input type="checkbox" data-sk="${r.k}" ${isNum(D.market[r.k]) ? "" : "checked"} aria-label="Apply ${esc(r.label)}"></td><td>${esc(r.label)}</td><td class="n">${r.fmt(D.market[r.k])}</td><td class="n"><b>${r.fmt(r.v)}</b></td><td class="small muted">${esc(r.src)}</td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="row" style="gap:8px;margin-top:6px"><button data-act="conn-apply-sugg">Apply ticked suggestions</button><span class="small muted">Ticked by default only where the input is empty. Your own values stay unless you tick them.</span></div>
+    ${(dm.notes||[]).length ? `<ul class="plain small muted" style="margin-top:4px">${dm.notes.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</div>`;
+}
+function applySugg(){
+  const rows = marketSugg(), picked = [...document.querySelectorAll("[data-sk]:checked")].map(x => x.dataset.sk); let n = 0;
+  rows.filter(r => picked.includes(r.k)).forEach(r => { const old = D.market[r.k]; D.market[r.k] = r.v; D.marketSources[r.k] = r.src; logUpdate("market", "suggestion", `${r.k}: ${old ?? "blank"} → ${r.v}`); n++; });
+  if (!n) { toast("Nothing ticked."); return; }
+  touch("market"); recalc({render:false}); renderView(); toast(`${n} suggested input${n>1?"s":""} applied; the model recalculated.`);
+}
+/* ---- forecast suggestion from the financial history ---- */
+function suggestForecast(){
+  const f = D.financials, A = D.assumptions, n = f.years.length - 1, rv = f.revenue, r3 = x => Math.round(x*1000)/1000, cl = (x,a,b) => Math.min(b, Math.max(a, x));
+  const gs = []; for (let i = 1; i <= n; i++) if (isNum(rv[i]) && isNum(rv[i-1]) && rv[i-1] > 0) gs.push(rv[i]/rv[i-1] - 1);
+  if (!gs.length || !isNum(rv[n])) return null;
+  const g1 = cl(gs[gs.length-1], -0.10, 0.30), rf = D.market.rf;
+  const gT = Math.floor(Math.max(0.01, Math.min(A.maxG, isNum(rf) ? rf - 0.02 : 0.03)) * 400) / 400;
+  const ms = []; for (let i = 0; i <= n; i++) if (isNum(f.ebit[i]) && isNum(f.da[i]) && isNum(rv[i]) && rv[i] > 0) ms.push((f.ebit[i] + f.da[i]) / rv[i]);
+  const margin = ms.length ? r3(ms.slice(-2).reduce((a,b) => a+b, 0) / Math.min(2, ms.length)) : null;
+  const das = []; for (let i = 0; i <= n; i++) if (isNum(f.da[i]) && isNum(rv[i]) && rv[i] > 0) das.push(f.da[i] / rv[i]);
+  const daPct = das.length ? r3(das[das.length-1]) : null;
+  const IC = i => [f.equityTotal[i], f.bankLoans[i], f.cash[i]].every(isNum) ? f.equityTotal[i] + f.bankLoans[i] + (f.leases[i] || 0) - f.cash[i] : null;
+  let s2c = null, s2cHow = "";
+  if (IC(n) != null && IC(n-1) != null && IC(n) - IC(n-1) > 0 && isNum(rv[n-1])) { const m = (rv[n] - rv[n-1]) / (IC(n) - IC(n-1)); if (m >= 0.2 && m <= 5) { s2c = m; s2cHow = `marginal FY${f.years[n]}: Δrevenue ÷ Δinvested capital = ${m.toFixed(2)}`; } }
+  if (s2c == null && IC(n) > 0) { s2c = rv[n] / IC(n); s2cHow = `revenue ÷ invested capital FY${f.years[n]} = ${s2c.toFixed(2)}`; }
+  if (margin == null || daPct == null || s2c == null) return null;
+  s2c = Math.round(cl(s2c, 0.3, 4) * 100) / 100;
+  const Y = A.forecastYears.length, base = Array.from({length:Y}, (_,t) => r3(g1 + (gT - g1) * t / Y));
+  const capB = isNum(rf) ? Math.min(A.maxG, rf - 0.01) : A.maxG;
+  const mk = (dg, dm, ks, dgT, wa) => ({growth: base.map(x => r3(Math.max(-0.05, x + dg))), ebitdaMargin: Array(Y).fill(r3(margin + dm)), daPct: Array(Y).fill(daPct), s2c: Array(Y).fill(Math.round(s2c * ks * 100) / 100), gTerminal: Math.round(Math.min(capB, gT + dgT) * 10000) / 10000, waccAdj: wa});
+  return {bear: mk(-0.03, -0.02, 0.85, -0.005, 0.005), base: mk(0, 0, 1, 0, 0), bull: mk(0.02, 0.015, 1.2, 0.005, -0.005),
+    basis: {g1, gT, margin, daPct, s2c, s2cHow, years: f.years[n]}};
+}
+let fcSugg = null;
+function fcPanel(){
+  const S = fcSugg, Y = D.assumptions.forecastYears;
+  const head = `<div class="panel"><div class="panel-head"><h3>Suggest forecast from history</h3><button data-act="fc-suggest">${S ? "Recalculate suggestion" : "Suggest from history"}</button></div>
+    <p class="small muted">Starting values derived from the financial history; check them against guidance, consensus and industry before relying on them. Nothing changes until you click <i>Apply</i>.</p>`;
+  if (S === false) return head + `<div class="note bad small">Not enough history: revenue, EBIT, D&A, equity, debt and cash of the last two years are needed.</div></div>`;
+  if (!S) return head + `</div>`;
+  const b = S.basis, sc = ["bear","base","bull"];
+  return head + `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Scenario</th><th>Revenue growth ${esc(Y[0])}–${esc(Y[Y.length-1])}</th><th class="n">EBITDA margin</th><th class="n">D&A % rev.</th><th class="n">Sales-to-capital</th><th class="n">Terminal g</th><th class="n">WACC overlay</th></tr></thead><tbody>
+    ${sc.map(s => `<tr><td>${D.assumptions.scenarios[s].label}</td><td>${S[s].growth.map(p1).join(" → ")}</td><td class="n">${p1(S[s].ebitdaMargin[0])}</td><td class="n">${p1(S[s].daPct[0])}</td><td class="n">${f2(S[s].s2c[0])}</td><td class="n">${p1(S[s].gTerminal)}</td><td class="n">${sp1(S[s].waccAdj)}</td></tr>`).join("")}</tbody></table></div>
+    <ul class="plain small muted" style="margin-top:6px"><li>Growth: last revenue growth FY${esc(b.years)} ${p1(b.g1)}, fading linearly towards terminal growth ${p1(b.gT)} (= min(max. g ${p1(D.assumptions.maxG)}, Rf − 2pp)).</li>
+    <li>EBITDA margin: average of the last two years (EBIT + D&A) ÷ revenue = ${p1(b.margin)}. D&A: last year ${p1(b.daPct)} of revenue.</li><li>Sales-to-capital: ${esc(b.s2cHow)}.</li>
+    <li>Bear: growth −3pp, margin −2pp, sales-to-capital ×0.85, g −0.5pp, WACC +0.5pp. Bull: growth +2pp, margin +1.5pp, sales-to-capital ×1.2, g +0.5pp (below Rf − 1pp), WACC −0.5pp. Probabilities unchanged.</li></ul>
+    <div class="row" style="gap:8px;margin-top:6px"><button class="primary" data-act="fc-apply">Apply suggestion to all scenarios</button><span class="small muted">Overwrites the current forecast drivers; the change is logged.</span></div></div>`;
+}
+function applyFc(){
+  const S = fcSugg; if (!S) return; const A = D.assumptions, b = S.basis, today = nowISO().slice(0,10);
+  ["bear","base","bull"].forEach(s => Object.assign(A.scenarios[s], {growth:S[s].growth, ebitdaMargin:S[s].ebitdaMargin, daPct:S[s].daPct, s2c:S[s].s2c, gTerminal:S[s].gTerminal, waccAdj:S[s].waccAdj}));
+  D.assumptionSources = Object.assign(D.assumptionSources || {}, {
+    growth:`Suggested from history (${today}): last revenue growth FY${b.years} ${p1(b.g1)} fading to terminal growth; Bear −3pp, Bull +2pp.`,
+    ebitdaMargin:`Suggested from history (${today}): average EBITDA margin of the last two years ${p1(b.margin)}; Bear −2pp, Bull +1.5pp.`,
+    daPct:`Suggested from history (${today}): D&A FY${b.years} = ${p1(b.daPct)} of revenue.`, s2c:`Suggested from history (${today}): ${b.s2cHow}; Bear ×0.85, Bull ×1.2.`,
+    gTerminal:`Suggested: min(max. terminal growth, Rf − 2pp) = ${p1(b.gT)}; Bear −0.5pp, Bull +0.5pp.`, waccAdj:"Scenario risk overlay on WACC: Bear +0.5pp, Bull −0.5pp.",
+    consensus:"Forecast drivers suggested from the financial history; not yet checked against analyst consensus or company guidance."});
+  touch("assumptions"); logUpdate("assumptions", "suggestion", "forecast drivers suggested from history applied"); fcSugg = null; recalc(); toast("Forecast suggestion applied to Bear, Base and Bull.");
+}
+function applyPayload(P){
+  const notes = [], newCo = String(P.meta.ticker || "").toUpperCase() !== String(D.meta.ticker || "").toUpperCase();
+  ["company","ticker","exchange","currency"].forEach(k => { if (P.meta[k]) D.meta[k] = String(P.meta[k]); });
+  D.marketSources = D.marketSources || {};
+  Object.entries(P.market || {}).forEach(([k,v]) => { if (!(k in D.market) || !isNum(v)) return;
+    if (k === "tax" && isNum(D.market.tax)) { notes.push(`Effective tax rate last fiscal year per source: ${(v*100).toFixed(1)}%. Your tax rate ${(D.market.tax*100).toFixed(1)}% was kept (change it on this page if the effective rate is more representative).`); return; }
+    D.market[k] = v; D.marketSources[k] = P.marketSource; });
+  if (P.market && P.market.priceDate) D.market.priceDate = P.market.priceDate;
+  touch("market");
+  const F = P.financials || {}, items = F.items || {};
+  if ((F.years || []).length) {
+    if (newCo) FIN_ROWS.flatMap(g => g[1]).forEach(([k]) => { if (!(k in items) && Array.isArray(D.financials[k])) { D.financials[k] = D.financials[k].map(() => null); notes.push(`${FIN_LABEL[k]}: not delivered by the source – enter it from the annual report.`); } });
+    importFinRows([["item"].concat(F.years)].concat(Object.entries(items).map(([k,v]) => [k].concat(v))), notes);
+    D.financials.source = F.source || D.financials.source;
+  }
+  if ((P.peers || []).length) {
+    const old = Object.fromEntries(D.peers.map(p => [String(p.ticker).toUpperCase(), p]));
+    const rows = [PEER_COLS.map(c => c[0])].concat(P.peers.map(p => { const o = old[String(p.ticker).toUpperCase()];
+      return PEER_COLS.map(([k]) => k === "audited" ? (o ? o.audited : p.audited) : k === "closeModel" ? (o ? o.closeModel : p.closeModel) : (p[k] ?? "")); }));
+    importPeerRows(rows, notes);
+  }
+  if (P.profile && typeof P.profile.isFinancial === "boolean") D.profile.isFinancial = P.profile.isFinancial;
+  logUpdate("all", "fetch", `${D.meta.ticker}: market and peers from Yahoo, statements from ${(P.connector && P.connector.financialSource) || "Yahoo"}`);
+  recalc({render:false});
+  return notes.concat(P.notes || []);
+}
+async function connFetch(){
+  const t = (document.getElementById("conn-t").value || "").trim().toUpperCase(); if (!t) { toast("Enter a ticker first."); return; }
+  const peers = (document.getElementById("conn-peers").value || "").trim(), fin = document.getElementById("conn-fin").value;
+  conn.busy = true; conn.out = ""; connRender();
+  try {
+    const P = await connGet(`/fetch?ticker=${encodeURIComponent(t)}&exchange=${encodeURIComponent(D.meta.exchange || "IDX")}&peers=${encodeURIComponent(peers)}&date=${encodeURIComponent(D.meta.valuationDate || "")}&fin=${fin}`, 180000);
+    const notes = applyPayload(P); conn.dm = P.damodaran || null; conn.ind = null;
+    const lines = Object.entries((P.financials || {}).lineSource || {}).map(([k,v]) => `${FIN_LABEL[k] || k}: ${v}`);
+    conn.out = `<div class="note small"><b>Fetched ${esc(D.meta.company)} (${esc(TK())}) – statements from ${esc((P.connector||{}).financialSource || "Yahoo")}, ${P.peers.length} peers. ${R ? "Model recalculated." : "Some inputs are still missing (see the highlighted fields)."}</b>
+      <ul class="plain" style="margin-top:4px">${notes.slice(0,20).map(n => `<li>${esc(n)}</li>`).join("")}</ul>${lines.length ? `<details style="margin-top:4px"><summary>Source per line</summary><div class="small muted">${esc(lines.join(" · "))}</div></details>` : ""}</div>`;
+    toast(`Data for ${t} fetched and applied.`);
+  } catch(e) {
+    conn.out = `<div class="note bad small"><b>Fetch failed:</b> ${esc(e.name === "AbortError" ? "no answer from the connector in time" : (e.message || String(e)))}</div>`;
+  }
+  conn.busy = false; renderView();
+}
+async function connSearch(){
+  const q = (document.getElementById("conn-q").value || "").trim(); if (q.length < 2) { toast("Type at least two characters."); return; }
+  try { conn.results = (await connGet(`/search?q=${encodeURIComponent(q)}&exchange=${encodeURIComponent(D.meta.exchange || "IDX")}`, 30000)).results || []; if (!conn.results.length) toast("No company found."); }
+  catch(e) { conn.results = []; toast("Search failed: " + (e.message || e)); }
+  connRender();
+}
+function sourceLine(){
+  const xs = [D.financials && D.financials.source].concat(Object.values(D.marketSources || {})).filter(Boolean);
+  const uniq = [...new Set(xs.map(x => String(x).split(":")[0].split(",")[0].trim()))].slice(0, 8);
+  return uniq.length ? uniq.join("; ") : "see source notes in the dataset";
+}
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const nowISO = () => { const d = new Date(), z = n => String(n).padStart(2,"0"), off = -d.getTimezoneOffset(), s = off>=0?"+":"-";
+  return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}${s}${z(Math.floor(Math.abs(off)/60))}:${z(Math.abs(off)%60)}`; };
+const fmtTS = s => s ? s.replace("T"," ").slice(0,16) : "–";
+const ICON = {
+  ok:'<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4.8 8.3l2.1 2.1 4.3-4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warn:'<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l6.6 12H1.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.2v3.6M8 11.6v.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  err:'<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
+};
+const statusOf = c => c.ok ? ["ok","Pass"] : (c.severity === "ERROR" ? ["err","Error"] : ["warn","Warning"]);
+function toast(msg){ const t = document.getElementById("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, 3600); }
+
+/* ---------------- persistence (per-viewer draft) ---------------- */
+function saveDraft(){ try { localStorage.setItem(STORE_KEY, JSON.stringify({savedAt: nowISO(), data: D})); } catch(e) {} }
+function loadDraft(){ try { const s = localStorage.getItem(STORE_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; } }
+function clearDraft(){ try { localStorage.removeItem(STORE_KEY); } catch(e) {} }
+
+/* ---------------- path helpers ---------------- */
+function getPath(o, p){ return p.split(".").reduce((a,k) => a == null ? undefined : a[k], o); }
+function setPath(o, p, v){ const ks = p.split("."); let a = o; for (let i=0;i<ks.length-1;i++) a = a[ks[i]]; a[ks[ks.length-1]] = v; }
+const SECTION = p => p.startsWith("financials") ? "financials" : p.startsWith("peers") ? "peers" :
+  (p.startsWith("assumptions") ? "assumptions" : "market");
+function logUpdate(section, action, detail){
+  D.meta.updateLog = D.meta.updateLog || [];
+  D.meta.updateLog.unshift({time: nowISO(), section, action, detail});
+  D.meta.updateLog = D.meta.updateLog.slice(0, 60);
+}
+function touch(section){ D.meta.lastUpdated[section] = nowISO(); }
+
+/* ---------------- pre-validation (missing / non-numeric inputs) ---------------- */
+function preValidate(d){
+  const out = [], need = (path, label) => { const v = getPath(d, path); if (!isNum(v)) out.push({path, label}); };
+  [["market.price","Share price"],["market.sharesMn","Shares outstanding"],["market.rf","Risk-free rate"],["market.erp","Equity risk premium"],
+   ["market.betaU","Unlevered beta"],["market.tax","Tax rate"],["market.kdSpread","Debt spread"]].forEach(x => need(...x));
+  const f = d.financials, n = f.years.length, L = n-1;
+  if (n < 3) out.push({path:"financials.years", label:"At least three fiscal years"});
+  const req = ["revenue","ebit","netIncome","niParent","eps","totalAssets","totalLiabilities","equityTotal","equityParent","nci","cash","cfo"];
+  req.forEach(k => f.years.forEach((y,i) => { if (!isNum(f[k][i])) out.push({path:`financials.${k}.${i}`, label:`${FIN_LABEL[k]||k} ${y}`}); }));
+  ["da","capex","disposalProceeds","bankLoans","leases","opNWC","financeCharges"].forEach(k => [L-1, L].forEach(i => { if (!isNum(f[k][i])) out.push({path:`financials.${k}.${i}`, label:`${FIN_LABEL[k]||k} ${f.years[i]}`}); }));
+  if (!d.peers.length) out.push({path:"peers", label:"At least one peer"});
+  d.peers.forEach((p,i) => ["price","sharesMn","bvps","debt","cash"].forEach(k => { if (!isNum(p[k])) out.push({path:`peers.${i}.${k}`, label:`${p.ticker||"Peer "+(i+1)} ${k}`}); }));
+  d.peers.forEach((p,i) => { if (!isNum(p.eps)) out.push({path:`peers.${i}.eps`, label:`${p.ticker} EPS`}); });
+  const sc = d.assumptions.scenarios;
+  for (const k of ["bear","base","bull"]) { const s = sc[k]; if (!s) { out.push({path:"assumptions.scenarios."+k, label:k+" scenario"}); continue; }
+    ["growth","ebitdaMargin","daPct","s2c"].forEach(dr => s[dr].forEach((v,i) => { if (!isNum(v)) out.push({path:`assumptions.scenarios.${k}.${dr}.${i}`, label:`${s.label} ${dr} ${d.assumptions.forecastYears[i]}`}); }));
+    ["gTerminal","waccAdj","probability"].forEach(dr => { if (!isNum(s[dr])) out.push({path:`assumptions.scenarios.${k}.${dr}`, label:`${s.label} ${dr}`}); }); }
+  return out;
+}
+
+/* ---------------- recalculation ---------------- */
+function recalc(opts = {}){
+  missing = preValidate(D); calcError = null; R = null;
+  if (!missing.length) { try { R = BirdEngine.valuate(D); } catch(e) { calcError = e.message || String(e); } }
+  calcAt = nowISO();
+  saveDraft(); renderLive(); renderRail();
+  if (opts.render !== false) renderView();
+  else refreshResultBits();
+}
+let recalcTimer = null;
+function scheduleRecalc(){ clearTimeout(recalcTimer); recalcTimer = setTimeout(() => recalc({render:false}), 120); }
+
+/* ---------------- top bar & rail ---------------- */
+function renderLive(){
+  const el = document.getElementById("live"), m = D.market;
+  document.getElementById("tb-tick").textContent = `${D.meta.exchange ? D.meta.exchange + ": " : ""}${TK()}`;
+  document.getElementById("tb-co").textContent = CO();
+  if (!R) { el.innerHTML = `<span class="pill SUSPENDED"><span class="dot"></span>${missing.length ? missing.length+" input(s) missing" : "Calculation stopped"}</span>`; return; }
+  const r = R.rec;
+  el.innerHTML = `
+    <div class="kv"><span class="eyebrow">Price ${esc(m.priceDate)}</span><b>${CUR()} ${f0(m.price)}</b></div>
+    <div class="kv"><span class="eyebrow">Central value</span><b>${CUR()} ${f0(r.central)}</b></div>
+    <div class="kv"><span class="eyebrow">Upside</span><b style="color:var(${r.upside>=0?"--good":"--bad"})">${sp1(r.upside)}</b></div>
+    <span class="pill ${r.final}"><span class="dot"></span>${r.final}${r.final!=="SUSPENDED"?" · "+r.conviction:""}</span>
+    <span class="muted small">Calculated ${fmtTS(calcAt).slice(11)}</span>`;
+}
+function renderRail(){
+  const err = R ? R.rec.errors : (missing.length || 1), warn = R ? R.rec.warnings : 0;
+  document.getElementById("rail").innerHTML = VIEWS.map(([g, items]) => `<div class="grp eyebrow">${g}</div>` + items.map(([id, label]) => {
+    let badge = "";
+    if (id === "checks") badge = err ? `<span class="badge err">${err}</span>` : (warn ? `<span class="badge warn">${warn}</span>` : "");
+    return `<a href="#${id}" data-view="${id}" ${id===view?'aria-current="page"':""}>${label}${badge}</a>`; }).join("")).join("");
+}
+
+/* ---------------- charts (SVG) ---------------- */
+function tipOn(e, html){ const t = document.getElementById("tip"); t.innerHTML = html; t.hidden = false;
+  const x = Math.min(e.clientX + 14, window.innerWidth - t.offsetWidth - 8), y = e.clientY + 14; t.style.left = x+"px"; t.style.top = y+"px"; }
+function tipOff(){ document.getElementById("tip").hidden = true; }
+function niceTicks(lo, hi, n=5){ const span = hi-lo, step0 = span/n, mag = Math.pow(10, Math.floor(Math.log10(step0))), r = step0/mag;
+  const step = (r>=5?10:r>=2?5:r>=1?2:1)*mag; const out=[]; for (let v=Math.ceil(lo/step)*step; v<=hi+1e-9; v+=step) out.push(v); return out; }
+
+function footballField(rows, price, central, opts = {}){
+  const W = 760, lw = 170, rp = 24, rowH = 34, top = 30, H = top + rows.length*rowH + 34;
+  const cap = 2.2 * Math.max(price, central);   // axis cap: outliers beyond this are clipped and labelled
+  const vals = rows.flatMap(r => [r.low, r.high, r.point]).concat([price, central]).filter(isNum).map(v => Math.min(v, cap));
+  let lo = Math.min(...vals), hi = Math.max(...vals); const pad = (hi-lo)*0.08; lo = Math.max(0, lo-pad); hi = hi+pad;
+  const ticks = niceTicks(lo, hi, 6); lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length-1]);
+  const x = v => lw + (v-lo)/(hi-lo)*(W-lw-rp);
+  const col = opts.literal ? {ink:"#14202c",ink3:"#6f7d8b",line:"#d6dde4",s1:"#2a78d6",s2:"#eb6834",s3:"#1baf7a",acc:"#0d5c8a",surface:"#ffffff"} :
+    {ink:"var(--ink)",ink3:"var(--ink-3)",line:"var(--line)",s1:"var(--s1)",s2:"var(--s2)",s3:"var(--s3)",acc:"var(--accent)",surface:"var(--surface)"};
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Valuation ranges by method in ${esc(CUR())} per share, with market price and central estimate">`;
+  ticks.forEach(t => s += `<line x1="${x(t)}" x2="${x(t)}" y1="${top-6}" y2="${H-28}" stroke="${col.line}" stroke-width="1"/><text x="${x(t)}" y="${H-12}" text-anchor="middle" font-size="11" fill="${col.ink3}" class="tnum">${f0(t)}</text>`);
+  rows.forEach((r,i) => {
+    const y = top + i*rowH, c = col[r.color] || col.s1;
+    s += `<text x="0" y="${y+rowH/2+4}" font-size="12.5" fill="${col.ink}" font-weight="${r.strong?700:500}">${esc(r.label)}</text>`;
+    if (isNum(r.low) && isNum(r.high) && r.high - r.low > 0.5) {
+      const clipped = r.high > hi, x1 = x(r.low), x2 = x(Math.min(r.high, hi));
+      s += `<rect x="${x1}" y="${y+8}" width="${Math.max(2,x2-x1)}" height="${rowH-16}" rx="4" fill="${c}" opacity="${r.strong?1:.85}" data-tip="${esc(r.label)}: ${CUR()} ${f0(r.low)} – ${f0(r.high)}${isNum(r.point)?" · point "+CUR()+" "+f0(r.point):""}"/>`;
+      if (clipped) s += `<text x="${x2-4}" y="${y+rowH/2+4}" text-anchor="end" font-size="11" font-weight="600" fill="${col.surface}" class="tnum">→ ${f0(r.high)}</text>`;
+    }
+    if (isNum(r.point)) s += `<circle cx="${x(r.point)}" cy="${y+rowH/2}" r="5" fill="${col.surface}" stroke="${c}" stroke-width="2.5" data-tip="${esc(r.label)}: ${CUR()} ${f0(r.point)}"/>`;
+  });
+  const xp = x(price), xc = x(central);
+  s += `<line x1="${xp}" x2="${xp}" y1="${top-8}" y2="${H-28}" stroke="${col.ink}" stroke-width="2" stroke-dasharray="4 3"/>`;
+  s += `<text x="${xp}" y="${top-12}" text-anchor="${xp > W-120 ? "end":"middle"}" font-size="11.5" font-weight="700" fill="${col.ink}">Price ${f0(price)}</text>`;
+  s += `<line x1="${xc}" x2="${xc}" y1="${top-2}" y2="${H-28}" stroke="${col.acc}" stroke-width="2"/>`;
+  s += `<text x="${xc}" y="${H-28+0}" dy="-4" text-anchor="${xc < xp ? "end":"start"}" dx="${xc < xp ? -4 : 4}" font-size="11.5" font-weight="700" fill="${col.acc}">Central ${f0(central)}</text>`;
+  return s + `</svg>`;
+}
+
+function tornadoChart(T, center){
+  const W = 760, lw = 190, rp = 60, rowH = 30, top = 18, H = top + T.length*rowH + 30;
+  const vals = T.flatMap(t => [t.low, t.high]).concat([center]); let lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = (hi-lo)*0.06; lo -= pad; hi += pad; const ticks = niceTicks(lo, hi, 6);
+  const x = v => lw + (v-lo)/(hi-lo)*(W-lw-rp);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Tornado chart: blended value per share when each driver moves">`;
+  ticks.forEach(t => s += `<line x1="${x(t)}" x2="${x(t)}" y1="${top-4}" y2="${H-24}" stroke="var(--line-2)"/><text x="${x(t)}" y="${H-8}" text-anchor="middle" font-size="11" fill="var(--ink-3)" class="tnum">${f0(t)}</text>`);
+  T.forEach((t,i) => { const y = top + i*rowH, xc = x(center);
+    s += `<text x="0" y="${y+rowH/2+4}" font-size="12.5" fill="var(--ink)">${esc(t.driver)}</text>`;
+    s += `<rect x="${x(t.low)}" y="${y+6}" width="${Math.max(1, xc - x(t.low) - 1)}" height="${rowH-12}" rx="3" fill="var(--s2)" data-tip="${esc(t.driver)} ${esc(t.lowLabel)}: ${CUR()} ${f0(t.low)}"/>`;
+    s += `<rect x="${xc+1}" y="${y+6}" width="${Math.max(1, x(t.high) - xc - 1)}" height="${rowH-12}" rx="3" fill="var(--s1)" data-tip="${esc(t.driver)} ${esc(t.highLabel)}: ${CUR()} ${f0(t.high)}"/>`;
+    s += `<text x="${x(t.low)-4}" y="${y+rowH/2+4}" text-anchor="end" font-size="11" fill="var(--ink-2)" class="tnum">${f0(t.low)}</text>`;
+    s += `<text x="${x(t.high)+4}" y="${y+rowH/2+4}" font-size="11" fill="var(--ink-2)" class="tnum">${f0(t.high)}</text>`; });
+  s += `<line x1="${x(center)}" x2="${x(center)}" y1="${top-4}" y2="${H-24}" stroke="var(--ink)" stroke-width="1.5"/>`;
+  return s + `</svg>`;
+}
+
+function barsChart(labels, series, opts = {}){ // series: [{name,color,values}]
+  const W = 760, H = opts.h || 220, lp = 56, bp = 26, tp = 14, rp = 8;
+  const all = series.flatMap(s => s.values).filter(isNum); let lo = Math.min(0, ...all), hi = Math.max(0, ...all);
+  const ticks = niceTicks(lo, hi, 4); lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length-1]);
+  const y = v => tp + (hi - v)/(hi-lo)*(H-tp-bp), gw = (W-lp-rp)/labels.length, bw = Math.min(28, (gw-10)/series.length - 2);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.aria||"Bar chart")}">`;
+  ticks.forEach(t => s += `<line x1="${lp}" x2="${W-rp}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line-2)"/><text x="${lp-6}" y="${y(t)+4}" text-anchor="end" font-size="11" fill="var(--ink-3)" class="tnum">${opts.fmt?opts.fmt(t):f0(t)}</text>`);
+  s += `<line x1="${lp}" x2="${W-rp}" y1="${y(0)}" y2="${y(0)}" stroke="var(--ink-3)"/>`;
+  labels.forEach((l,i) => { const gx = lp + i*gw + gw/2, tw = series.length*(bw+2);
+    series.forEach((se,j) => { const v = se.values[i]; if (!isNum(v)) return; const bx = gx - tw/2 + j*(bw+2), y0 = y(0), yv = y(v);
+      const h = Math.abs(yv-y0), yy = Math.min(yv,y0), r = Math.min(4, h/2);
+      const path = v >= 0 ? `M${bx},${y0}V${yy+r}q0,-${r} ${r},-${r}h${bw-2*r}q${r},0 ${r},${r}V${y0}Z` : `M${bx},${y0}V${y0+h-r}q0,${r} ${r},${r}h${bw-2*r}q${r},0 ${r},-${r}V${y0}Z`;
+      s += `<path d="${path}" fill="${se.color}" data-tip="${esc(se.name)} ${esc(l)}: ${opts.fmt?opts.fmt(v):f0(v)}"/>`; });
+    s += `<text x="${gx}" y="${H-8}" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">${esc(l)}</text>`; });
+  return s + `</svg>`;
+}
+function legend(items){ return `<div class="legend">${items.map(([c,l]) => `<span><i style="background:${c}"></i>${esc(l)}</span>`).join("")}</div>`; }
+
+/* ---------------- shared result fragments ---------------- */
+function suspendedNote(){
+  if (missing.length) return `<div class="note bad"><b>Calculation paused: ${missing.length} required input(s) missing.</b> Fill them in and the model recalculates automatically.<ul class="plain small" style="margin-top:6px">${missing.slice(0,12).map(m => `<li>${esc(m.label)} <span class="muted">(${esc(m.path)})</span></li>`).join("")}${missing.length>12?`<li>… and ${missing.length-12} more</li>`:""}</ul></div>`;
+  return `<div class="note bad"><b>Calculation stopped.</b> ${esc(calcError || "Unknown error")}. Check the inputs on the Validation checks view.</div>`;
+}
+function ffRows(){
+  const r = R.rec, M = R.relative.methods, dc = R.dcf, S = R.selector;
+  const rows = [
+    {label:"DCF (Bear–Bull)", low:dc.bear.vps, high:dc.bull.vps, point:dc.base.vps, color:"s1"},
+    {label:"P/E (peer min–max)", low:M.pe.low, high:M.pe.high, point:M.pe.value, color:"s2"},
+    {label:"P/BV (peer min–max)", low:M.pbv.low, high:M.pbv.high, point:M.pbv.value, color:"s2"},
+    {label:"EV/EBITDA", low:M.eve.low, high:M.eve.high, point:M.eve.value, color:"s2"},
+    {label:"Relative (weighted)", point:R.relative.value, color:"s2"},
+    {label:`Blended ${p1(S.wDCF)}/${p1(S.wREL)}`, low:r.low, high:r.high, point:r.central, color:"s3", strong:true}];
+  return rows.filter(x => isNum(x.point) || isNum(x.low));
+}
+/* data-driven narrative helpers: every sentence is rebuilt from the current inputs */
+function peerProfitText(){
+  const P = D.peers, n = P.length, fy = D.financials.years[D.financials.years.length-1];
+  const grow = P.filter(p => (p.niGrowth||0) > 0).length, loss = P.filter(p => !(p.eps > 0)).length;
+  if (!n) return "there are no peers";
+  if (grow === 0) return `none of the ${n} peers grew profit in FY${fy}${loss ? ` (${loss} reported a loss)` : ""}`;
+  if (grow === n) return `all ${n} peers grew profit in FY${fy}`;
+  return `${grow} of ${n} peers grew profit in FY${fy}${loss ? `, ${loss} reported a loss` : ""}`;
+}
+function signalPrices(){ const A = D.assumptions, c = R.rec.central; return {buyBelow: c/(1+A.buy), sellAbove: c/(1+A.sell)}; }
+function riskList(){
+  const r = R.rec, dcb = R.dcf.base, rel = R.relative, H = R.hist, m = D.market, Y = D.assumptions.forecastYears;
+  const tor = R.sens.tornado.find(t => t.driver.startsWith("EBITDA")) || {swing:0};
+  const out = [];
+  out.push(dcb.tvShare > 0.6
+    ? `Terminal value is ${p0(dcb.tvShare)} of DCF enterprise value; base-case FCFF for ${Y[0]}–${Y[1]} ${dcb.fcff[0]+dcb.fcff[1] < 0 ? "is negative in total" : "totals only"} (${CUR()} ${bn(dcb.fcff[0]+dcb.fcff[1])}bn), so long-run margin and WACC drive most of the value.`
+    : `Terminal value is ${p0(dcb.tvShare)} of DCF enterprise value, a moderate share; near-term cash flows carry a meaningful part of the value.`);
+  out.push(dcb.rnc[0] < dcb.wacc
+    ? `Return on new capital (${p1(dcb.rnc[0])}) is below WACC (${p1(dcb.wacc)}): faster growth lowers value unless capital efficiency or margins improve.`
+    : `Return on new capital (${p1(dcb.rnc[0])}) exceeds WACC (${p1(dcb.wacc)}): growth creates value, so a growth shortfall is a downside risk.`);
+  out.push(`Margin risk: ±2pp of EBITDA margin moves the central value by about ±${CUR()} ${f0(tor.swing/2)} per share.`);
+  out.push(`Peer comparability: the median peer is about ${f0(R.wacc.mcap/rel.peerMcapMedian)}x smaller than ${esc(D.meta.ticker)}, ${peerProfitText()}, and P/E dispersion is ${rel.cvPE==null?"not measurable":"CV "+f2(rel.cvPE)}.`);
+  out.push(`Cost of capital uses a bottom-up beta of ${f2(m.betaU)} (unlevered)${isNum(m.betaReg) ? ` instead of the regression beta of ${f2(m.betaReg)}` : ""} and an assumed ${p2(m.kdSpread)} debt spread over the risk-free rate.`);
+  const sp = signalPrices();
+  out.push(`Price sensitivity of the call: at the current central value the signal turns BUY below ${CUR()} ${f0(sp.buyBelow)} and SELL above ${CUR()} ${f0(sp.sellAbove)} (price observed ${esc(m.priceDate)}).`);
+  return out;
+}
+
+/* ---------------- views ---------------- */
+const V = {};
+V.dashboard = () => {
+  if (!R) return head("Dashboard",`Live valuation summary for ${esc(CO())}.`) + suspendedNote();
+  const r = R.rec, S = R.selector, dc = R.dcf, m = D.market, M = R.relative.methods;
+  const meth = [
+    ["DCF (FCFF), base case", dc.base.vps, S.wDCF, "s1"],
+    ["Relative valuation (peer multiples)", R.relative.value, S.wREL, "s2"]];
+  return head("Dashboard", `Valuation date ${esc(D.meta.valuationDate)} · market price ${CUR()} ${f0(m.price)} (${esc(m.priceDate)}) · all values in ${esc(CUR())} per share unless stated.`,
+    `<div class="row"><button data-act="recalc">Recalculate</button><a class="btn" href="#data">Export results</a></div>`) +
+  `<div class="grid g-dash">
+    <div class="stack">
+      <div class="ticket">
+        <div class="ticket-top"><div><div class="eyebrow">Recommendation</div><div class="verdict ${r.final}">${r.final}</div>
+          <div class="small" style="margin-top:6px">${r.final==="SUSPENDED" ? `${r.errors} validation error(s) – fix before use` : `<b>${r.conviction} conviction</b> · ${r.criteriaMet} of 4 criteria met`}</div></div>
+          <div style="text-align:right"><div class="eyebrow">Primary approach</div><div style="font-weight:700">${S.primary}</div><div class="small muted">${p1(S.wDCF)} DCF · ${p1(S.wREL)} multiples</div></div></div>
+        <div class="meter">
+          <div><div class="eyebrow">Central estimate</div><div class="v">${CUR()} ${f0(r.central)}</div></div>
+          <div><div class="eyebrow">Market price</div><div class="v">${CUR()} ${f0(m.price)}</div></div>
+          <div><div class="eyebrow">Fair-value range</div><div class="v" style="font-size:18px">${f0(r.low)} – ${f0(r.high)}</div></div>
+          <div><div class="eyebrow">Implied upside</div><div class="v ${r.upside>=0?"up":"down"}">${sp1(r.upside)}</div></div>
+          <div><div class="eyebrow">Probability-weighted</div><div class="v" style="font-size:18px">${CUR()} ${f0(r.probWeighted)}</div></div>
+          <div><div class="eyebrow">Range vs price</div><div class="v" style="font-size:18px">${sp1(r.upsideLow)} / ${sp1(r.upsideHigh)}</div></div>
+        </div>
+        <div class="ticket-foot"><span>Rule: BUY ≥ ${sp1(D.assumptions.buy)}, SELL ≤ ${sp1(D.assumptions.sell)}</span><span>Calculated ${fmtTS(calcAt)}</span></div>
+      </div>
+      <div class="panel"><div class="panel-head"><h3>Decision criteria</h3><a href="#recommendation" class="small">Details</a></div>${critList(r.criteria)}</div>
+    </div>
+    <div class="stack">
+      <div class="panel"><div class="panel-head"><h3>Value per share by method</h3>${legend([["var(--s1)","DCF"],["var(--s2)","Multiples"],["var(--s3)","Blended"]])}</div>
+        <div class="tbl-wrap">${footballField(ffRows(), m.price, r.central)}</div>
+        <p class="small muted">Bars: DCF Bear–Bull and peer min–max; dot: point estimate; dashed line: market price. Bars beyond the axis are cut and labelled with their end value${(() => { const rows = R.relative.rows.filter(x => x.pe != null); if (!rows.length) return ""; const mxp = rows.reduce((a,b) => b.pe > a.pe ? b : a); return mxp.pe*R.hist.eps > 2.2*Math.max(D.market.price, R.rec.central) ? ` (the P/E maximum comes from ${esc(mxp.ticker)} at ${mx(mxp.pe)})` : ""; })()}.</p></div>
+      <div class="panel"><h3>Results by method</h3><div class="tbl-wrap"><table>
+        <thead><tr><th>Method</th><th class="n">Value / share</th><th class="n">Weight</th><th class="n">vs price</th></tr></thead><tbody>
+        ${meth.map(([l,v,w]) => `<tr><td>${l}</td><td class="n">${f0(v)}</td><td class="n">${p1(w)}</td><td class="n">${sp1(v/m.price-1)}</td></tr>`).join("")}
+        <tr class="sub"><td>&nbsp;&nbsp;P/E × EPS 2025 (n=${M.pe.n})</td><td class="n">${f0(M.pe.value)}</td><td class="n">${p1(M.pe.weight*S.wREL)}</td><td class="n">${sp1(M.pe.value/m.price-1)}</td></tr>
+        <tr class="sub"><td>&nbsp;&nbsp;P/BV × BVPS 2025 (n=${M.pbv.n})</td><td class="n">${f0(M.pbv.value)}</td><td class="n">${p1(M.pbv.weight*S.wREL)}</td><td class="n">${sp1(M.pbv.value/m.price-1)}</td></tr>
+        <tr class="sub"><td>&nbsp;&nbsp;EV/EBITDA × EBITDA 2025 (n=${M.eve.n})</td><td class="n">${f0(M.eve.value)}</td><td class="n">${p1(M.eve.weight*S.wREL)}</td><td class="n">${sp1(isNum(M.eve.value)?M.eve.value/m.price-1:NaN)}</td></tr>
+        <tr class="total"><td>Blended central estimate (Base)</td><td class="n">${f0(r.central)}</td><td class="n">100%</td><td class="n">${sp1(r.upside)}</td></tr>
+        </tbody></table></div></div>
+    </div>
+  </div>
+  <div class="grid g3">
+    <div class="panel"><h3>Scenarios</h3><table><thead><tr><th>Scenario</th><th class="n">Prob.</th><th class="n">DCF</th><th class="n">Blended</th></tr></thead><tbody>
+      ${["bear","base","bull"].map(k => `<tr><td>${D.assumptions.scenarios[k].label}</td><td class="n">${p0(D.assumptions.scenarios[k].probability)}</td><td class="n">${f0(dc[k].vps)}</td><td class="n">${f0(r.blended[k])}</td></tr>`).join("")}
+      <tr class="total"><td>Probability-weighted</td><td class="n">100%</td><td class="n">–</td><td class="n">${f0(r.probWeighted)}</td></tr></tbody></table></div>
+    <div class="panel"><h3>Market reading</h3><dl class="kvlist">
+      <dt>Market cap</dt><dd>${CUR()} ${bn(R.wacc.mcap)}bn</dd><dt>EV / EBITDA 2025</dt><dd>${mx((R.wacc.mcap+R.hist.debtL-R.hist.cashL+R.hist.nciL)/R.hist.ebitda[R.hist.L])}</dd>
+      <dt>P / E 2025</dt><dd>${mx(m.price/R.hist.eps)}</dd><dt>P / BV 2025</dt><dd>${mx(m.price/R.hist.bvps)}</dd>
+      <dt>Implied EBITDA margin</dt><dd>${p1(R.reverse.impliedMargin)} <span class="muted">vs ${p1(R.reverse.deliveredMargin)} delivered</span></dd>
+      <dt>Implied WACC</dt><dd>${p2(R.reverse.impliedWacc)} <span class="muted">vs ${p2(dc.base.wacc)} model</span></dd></dl></div>
+    <div class="panel"><div class="panel-head"><h3>Model status</h3><a href="#checks" class="small">All checks</a></div>
+      <p>${r.errors ? `<span class="status err">${ICON.err}${r.errors} error(s)</span>` : `<span class="status ok">${ICON.ok}No errors</span>`} &nbsp; ${r.warnings ? `<span class="status warn">${ICON.warn}${r.warnings} warning(s)</span>` : ""}</p>
+      <dl class="kvlist small" style="margin-top:8px"><dt>Market data</dt><dd>${fmtTS(D.meta.lastUpdated.market)}</dd><dt>Financials</dt><dd>${fmtTS(D.meta.lastUpdated.financials)}</dd>
+      <dt>Peers</dt><dd>${fmtTS(D.meta.lastUpdated.peers)}</dd><dt>Assumptions</dt><dd>${fmtTS(D.meta.lastUpdated.assumptions)}</dd><dt>Last calculation</dt><dd>${fmtTS(calcAt)}</dd></dl></div>
+  </div>
+  <div class="panel"><h3>Key risks, assumptions and limitations</h3><ul class="plain">${riskList().map(x => `<li>${x}</li>`).join("")}</ul></div>`;
+};
+function critList(C){ return `<div class="criteria">${C.map(c => `<div class="crit"><span class="status ${c.ok?"ok":"warn"}">${c.ok?ICON.ok:ICON.warn}</span><div><b>${esc(c.name)}</b><div class="small muted">${esc(c.detail)}</div></div></div>`).join("")}</div>`; }
+function head(t, sub, right=""){ return `<div class="view-head"><div class="stack" style="gap:4px"><h2>${t}</h2>${sub?`<p>${sub}</p>`:""}</div>${right}</div>`; }
+
+V.recommendation = () => {
+  if (!R) return head("Recommendation") + suspendedNote();
+  const r = R.rec, A = D.assumptions;
+  return head("Recommendation", "How the signal and the conviction level are decided. Every rule and threshold is editable under Decision rules.") +
+  `<div class="grid g2">
+    <div class="panel"><h3>Step 1 · Signal from the central estimate</h3>
+      <div class="formula">upside = central estimate / price − 1 = ${f0(r.central)} / ${f0(D.market.price)} − 1 = ${sp1(r.upside)}
+BUY  if upside ≥ ${sp1(A.buy)}
+SELL if upside ≤ ${sp1(A.sell)}
+HOLD otherwise                         → ${r.signal}</div>
+      <p class="small muted" style="margin-top:8px">The ±15% band reflects the precision of a small-cap valuation: inside it, the estimate cannot distinguish the price from fair value.</p></div>
+    <div class="panel"><h3>Step 2 · Model integrity gate</h3>
+      <p>${r.errors ? `<span class="status err">${ICON.err}${r.errors} validation error(s): recommendation suspended</span>` : `<span class="status ok">${ICON.ok}No validation errors: signal released</span>`}</p>
+      <p class="small muted" style="margin-top:6px">Any failed ERROR check (missing inputs, g ≥ Rf, broken EV-to-equity bridge, invalid drivers) replaces the signal with SUSPENDED.</p></div>
+  </div>
+  <div class="panel"><h3>Step 3 · Conviction from four criteria</h3>${critList(r.criteria)}
+    <div class="formula" style="margin-top:10px">gap = |DCF − Relative| / average = ${p1(r.gap)}
+if gap > ${p0(A.agreeLow)}            → Low conviction (methods disagree)
+else criteria met ≥ 3            → High
+else criteria met = 2            → Medium
+else                             → Low          → ${r.conviction} (${r.criteriaMet}/4)</div></div>
+  <div class="panel"><h3>Final view</h3><p style="font-size:16px"><span class="pill ${r.final}"><span class="dot"></span>${r.final}</span> &nbsp;
+    At ${CUR()} ${f0(D.market.price)}, ${esc(TK())} trades ${r.upside>=0?"below":"above"} its central estimate of ${CUR()} ${f0(r.central)} by ${p1(Math.abs(r.upside))}; the justified fair-value range is ${CUR()} ${f0(r.low)} – ${f0(r.high)} (Bear to Bull, blended).
+    ${r.signal==="HOLD" ? `The price ${r.pricePosition==="inside range"?"sits inside":"is "+r.pricePosition+" of"} the fair-value range${r.criteria[2].ok?", and the reverse DCF shows the market pricing in roughly the margin the company delivers":""}, so the upside is too small for a BUY and the downside too small for a SELL.` : r.signal==="BUY" ? `The central value exceeds the price by more than the BUY threshold${r.pricePosition==="below range"?"; the price is even below the Bear-case value":""}.` : `The price exceeds the central value by more than the SELL threshold${r.pricePosition==="above range"?"; it is even above the Bull-case value":""}.`}</p></div>`;
+};
+
+/* input helpers */
+function numInput(path, kind="num", opts={}){
+  const v = getPath(D, path); let shown = "";
+  if (isNum(v)) shown = kind === "pct" ? +(v*100).toFixed(4) : (kind === "mult" ? v : v);
+  return `<input class="cell" id="in-${path.replace(/\./g,"-")}" data-path="${path}" data-kind="${kind}" inputmode="decimal" value="${esc(shown)}" aria-label="${esc(opts.label||path)}">`;
+}
+function txtInput(path, opts={}){ return `<input class="cell txt" id="in-${path.replace(/\./g,"-")}" data-path="${path}" data-kind="${opts.kind||"text"}" value="${esc(getPath(D,path) ?? "")}" aria-label="${esc(opts.label||path)}" ${opts.type?`type="${opts.type}"`:""}>`; }
+function boolInput(path, label){ return `<label class="row" style="gap:6px"><input type="checkbox" id="in-${path.replace(/\./g,"-")}" data-path="${path}" data-kind="bool" ${getPath(D,path)?"checked":""}> ${esc(label)}</label>`; }
+function field(label, input, unit, src){ return `<div class="field"><label>${label}${unit?` <span class="unit">(${unit})</span>`:""}</label>${input}${src?`<div class="src">${esc(src)}</div>`:""}</div>`; }
+
+V.inputs = () => {
+  if (conn.state === "unknown" && (location.protocol === "file:" || /^https?:$/.test(location.protocol))) { conn.state = "checking"; setTimeout(() => connCheck(true), 0); }
+  const s = D.marketSources || {};
+  return head("Market & company inputs", "Observed market data and cost-of-capital inputs. Edit any value and the whole model recalculates. Percentages are typed as percent (7.189 = 7.189%).",
+    `<span class="muted small">Last updated ${fmtTS(D.meta.lastUpdated.market)}</span>`) +
+  `<div class="panel"><h3>Company</h3><div class="form-grid">
+    ${field("Company name", txtInput("meta.company",{label:"Company name"}))}
+    ${field("Ticker", txtInput("meta.ticker",{label:"Ticker"}))}
+    ${field("Exchange", txtInput("meta.exchange",{label:"Exchange"}))}
+    ${field("Currency", txtInput("meta.currency",{label:"Currency"}), "code, e.g. IDR, USD, EUR")}
+  </div><p class="small muted" style="margin-top:8px">The platform works for any listed company: change these fields and the inputs below, or start from a blank dataset under Import & export.</p>
+    <div class="stack" style="margin-top:12px;gap:10px">
+      <div><div class="eyebrow">Data sources for ${esc(TK())}</div><div id="co-links" style="margin-top:4px">${srcLinks(D.meta.ticker, D.meta.exchange, true) || '<span class="muted small">Enter a ticker to get the links.</span>'}</div></div>
+      <div><div class="eyebrow">Find a company or peers</div><div class="row" style="margin-top:4px;gap:6px"><input id="co-search" placeholder="Name or ticker, e.g. Astra or ASII" aria-label="Find a company" style="min-width:220px;flex:1 1 220px">
+        <a class="btn small-btn" id="co-search-y" href="https://finance.yahoo.com/lookup/" target="_blank" rel="noopener">Search Yahoo Finance</a>
+        <a class="btn small-btn" href="https://www.idx.co.id/id/perusahaan-tercatat/profil-perusahaan-tercatat/" target="_blank" rel="noopener">All IDX-listed companies</a>
+        <a class="btn small-btn" href="https://www.idx.co.id/id/" target="_blank" rel="noopener">IDX home</a></div>
+        <p class="small muted" style="margin-top:4px">Links open the source pages in a new tab. Copy the values into the fields (each field says where to find it) or fill the data template and import it. The exchanges do not let other websites download their data automatically, so nothing is fetched in the background.</p>
+        <p class="small" style="margin-top:4px"><b>Fetch all numbers automatically:</b> use the panel <i>Fetch data automatically</i> below (data connector), or run <code>python3 fetch_yahoo.py ${esc(String(D.meta.ticker||"TICKER").toUpperCase())} --exchange ${esc(String(D.meta.exchange||"IDX").toUpperCase())} --peers ${esc(D.peers.map(p=>p.ticker).filter(Boolean).join(" ")||"PEER1 PEER2")}</code> on your computer (included in the package, see User guide) and import the Excel file it writes under Import & export.</p></div>
+    </div></div>
+  ${connPanel()}
+  <div class="panel"><h3>Valuation date and price</h3><div class="form-grid">
+    ${field("Valuation date", txtInput("meta.valuationDate",{type:"date",label:"Valuation date"}), "YYYY-MM-DD", "Date the recommendation refers to")}
+    ${field("Share price", numInput("market.price","num",{label:"Share price"}), CUR()+" / share", (s.price ? s.price+" · " : "")+"Where to find: "+HINT.price)}
+    ${field("Price date", txtInput("market.priceDate",{type:"date",label:"Price date"}), "", "Checked against the valuation date (stale-price warning)")}
+    ${field("Shares outstanding", numInput("market.sharesMn","num",{label:"Shares"}), "million", (s.sharesMn ? s.sharesMn+" · " : "")+"Where to find: "+HINT.sharesMn)}
+  </div></div>
+  <div class="panel"><h3>Cost of capital</h3><div class="form-grid">
+    ${field("Risk-free rate", numInput("market.rf","pct",{label:"Risk-free rate"}), "%", (s.rf ? s.rf+" · " : "")+"Where to find: "+HINT.rf)}
+    ${field("Equity risk premium", numInput("market.erp","pct",{label:"ERP"}), "%", (s.erp ? s.erp+" · " : "")+"Where to find: "+HINT.erp)}
+    ${field("Unlevered beta", numInput("market.betaU","num",{label:"Unlevered beta"}), "x", (s.betaU ? s.betaU+" · " : "")+"Where to find: "+HINT.betaU)}
+    ${field("Regression beta (cross-check)", numInput("market.betaReg","num",{label:"Regression beta",optional:true}), "x", (s.betaReg ? s.betaReg+" · " : "")+"Where to find: "+HINT.betaReg)}
+    ${field("Tax rate", numInput("market.tax","pct",{label:"Tax"}), "%", (s.tax ? s.tax+" · " : "")+"Where to find: "+HINT.tax)}
+    ${field("Debt spread over Rf", numInput("market.kdSpread","pct",{label:"Debt spread"}), "%", (s.kdSpread ? s.kdSpread+" · " : "")+"Where to find: "+HINT.kdSpread)}
+  </div></div>
+  <div class="panel"><h3>Company profile (feeds the method selector)</h3><div class="form-grid">
+    ${field("Industry", txtInput("profile.industry",{label:"Industry"}))}
+    ${field("Business model", txtInput("profile.businessModel",{label:"Business model"}))}
+  </div><div class="row" style="margin-top:12px;gap:18px">
+    ${boolInput("profile.isFinancial","Financial-sector firm (bank / insurer)")}
+    ${boolInput("profile.auditedFS","Audited financial statements available")}
+    ${boolInput("profile.guidance","Management guidance or consensus available")}</div>
+    <p class="small muted" style="margin-top:8px">Ticking “financial-sector firm” sets the FCFF DCF weight to zero: for banks, debt is operating raw material, so FCFF and WACC are not meaningful.</p></div>`;
+};
+
+const FIN_ROWS = [
+  ["Income statement",[["revenue","Net revenue"],["ebit","Operating profit (EBIT)"],["da","Depreciation (D&A)"],["otherIncome","Other income – net"],["financeCharges","Finance charges"],["pbt","Profit before tax"],["taxExpense","Income tax"],["netIncome","Profit for the year"],["niParent","Profit to owners of parent"],["eps","EPS (per share, basic)"]]],
+  ["Cash flow",[["cfo","Cash flow from operations"],["capex","Capex (acquisition of PPE)"],["disposalProceeds","Proceeds from asset disposals"],["dividends","Dividends to parent shareholders"]]],
+  ["Balance sheet",[["totalAssets","Total assets"],["totalLiabilities","Total liabilities"],["equityTotal","Total equity"],["equityParent","Equity to owners of parent"],["nci","Non-controlling interests"],["cash","Cash and equivalents"],["bankLoans","Bank loans (current + non-current)"],["leases","Lease liabilities"],["opNWC","Operating net working capital"]]]];
+const FIN_LABEL = Object.fromEntries(FIN_ROWS.flatMap(g => g[1]));
+V.financials = () => {
+  const f = D.financials;
+  const rows = FIN_ROWS.map(([g, items]) => `<tr><td colspan="${f.years.length+1}" class="eyebrow" style="padding-top:12px">${g}</td></tr>` +
+    items.map(([k,l]) => `<tr><td class="lbl" title="${esc("Yahoo / annual report: "+(FIN_Y[k]||""))}">${l}<div class="src">${esc(FIN_Y[k]||"")}</div></td>${f.years.map((_,i) => `<td style="min-width:120px">${numInput(`financials.${k}.${i}`,"num",{label:l+" "+f.years[i],optional:true})}</td>`).join("")}</tr>`).join("")).join("");
+  return head("Financial history", `Audited consolidated figures in ${esc(CUR())} million. Source: ${esc(f.source)}.`,
+    `<div class="row"><button data-act="rollforward" title="Drop the oldest year and open an empty column for the next fiscal year">Roll forward one year</button><span class="muted small">Last updated ${fmtTS(D.meta.lastUpdated.financials)}</span></div>`) +
+  `<div class="panel" style="padding-block:10px"><div class="row" style="gap:8px"><span class="eyebrow">Source pages for ${esc(TK())}</span>${srcLinks(D.meta.ticker, D.meta.exchange, true)}</div><p class="small muted" style="margin-top:4px">Grey text under each line = name of the matching line on Yahoo Finance. Prefer the audited annual report where they differ.</p></div>
+  <div class="panel"><div class="tbl-wrap"><table class="tbl-edit"><thead><tr><th>${esc(CUR())} million</th>${f.years.map((y,i)=>`<th class="n" style="min-width:120px"><input class="cell" style="font-weight:600" data-path="financials.years.${i}" data-kind="text" value="${esc(y)}" aria-label="Fiscal year ${i+1}"></th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="small muted" style="margin-top:8px">Operating NWC = current operating assets (receivables, inventories, prepayments, prepaid taxes) − current operating liabilities (payables, accruals, taxes payable, advances, driver savings); cash, government bonds, assets held for sale, loans and leases excluded. FY2023 detail is not in the 2025 report, so 2023 cells for D&A, capex, loans and NWC are blank.</p></div><div id="live-derived">${finDerived()}</div>`;
+};
+function finDerived(){
+  const f = D.financials; if (!R) return "";
+  { const H = R.hist; return `<div class="panel"><h3>Derived history</h3><div class="tbl-wrap"><table><thead><tr><th>Metric</th>${f.years.map(y=>`<th class="n">${y}</th>`).join("")}</tr></thead><tbody>
+    <tr><td>EBITDA (EBIT + D&A), ${esc(CUR())} bn</td>${H.ebitda.map(v=>`<td class="n">${bn(v)}</td>`).join("")}</tr>
+    <tr><td>EBIT margin</td>${H.ebitMargin.map(v=>`<td class="n">${p1(v)}</td>`).join("")}</tr>
+    <tr><td>Revenue growth</td>${H.growth.map(v=>`<td class="n">${p1(v)}</td>`).join("")}</tr>
+    <tr><td>Net capex (capex − disposals), ${esc(CUR())} bn</td>${H.netCapex.map(v=>`<td class="n">${bn(v)}</td>`).join("")}</tr>
+    <tr><td>Net reinvestment, ${esc(CUR())} bn</td>${H.reinv.map(v=>`<td class="n">${bn(v)}</td>`).join("")}</tr>
+    <tr><td>FCFF (NOPAT − reinvestment), ${esc(CUR())} bn</td>${H.fcff.map(v=>`<td class="n">${bn(v)}</td>`).join("")}</tr>
+    <tr><td>Invested capital, ${esc(CUR())} bn</td>${H.invested.map(v=>`<td class="n">${bn(v)}</td>`).join("")}</tr></tbody></table></div>
+    <dl class="kvlist small" style="margin-top:10px"><dt>Revenue CAGR</dt><dd>${p1(H.cagr)}</dd><dt>ROIC ${f.years[H.L]}</dt><dd>${p1(H.roic)}</dd><dt>ROE ${f.years[H.L]}</dt><dd>${p1(H.roe)}</dd>
+    <dt>Marginal sales-to-capital</dt><dd>${f2(H.marginalS2C)}</dd><dt>Interest cover</dt><dd>${mx(H.interestCover)}</dd><dt>Net capex / revenue</dt><dd>${p1(H.capexIntensity)}</dd></dl></div>`; }
+}
+
+const PEER_COLS = [["ticker","Ticker","text"],["name","Company","text"],["price","Price","num"],["priceDate","Price date","date"],["sharesMn","Shares (mn)","num"],["eps","EPS","num"],["bvps","BVPS","num"],
+  ["revGrowth","Revenue growth","pct"],["niGrowth","Profit growth","pct"],["debt","Debt (mn)","num"],["cash","Cash (mn)","num"],["evEbitda","EV/EBITDA reported","num"],["audited","Audited","bool"],["closeModel","Close model","bool"],["source","Source","text"]];
+V.peers = () => {
+  const body = D.peers.map((p,i) => `<tr>${PEER_COLS.map(([k,l,kind]) => {
+    const path = `peers.${i}.${k}`;
+    if (kind === "bool") return `<td style="text-align:center"><input type="checkbox" data-path="${path}" data-kind="bool" ${p[k]?"checked":""} aria-label="${l} ${esc(p.ticker)}"></td>`;
+    if (kind === "text" || kind === "date") return `<td style="min-width:${k==="name"||k==="source"?220:k==="priceDate"?140:80}px">${txtInput(path,{label:l,type:kind==="date"?"date":null})}</td>`;
+    return `<td style="min-width:${k==="sharesMn"||k==="debt"||k==="cash"?120:90}px">${numInput(path, kind, {label:l, optional:["revGrowth","niGrowth","evEbitda"].includes(k)})}</td>`; }).join("")}
+    <td><button class="ghost" data-act="delpeer" data-i="${i}" aria-label="Remove ${esc(p.ticker)}">Remove</button></td></tr>`).join("");
+  return head("Peer data", "Comparable IDX-listed land-transport companies. Negative-earnings multiples are excluded automatically. “Close model” marks peers whose business model is close to the valued company's (feeds the method selector). Prices per share and amounts in million, in the dataset currency.",
+    `<div class="row"><button data-act="addpeer">Add peer</button><span class="muted small">Last updated ${fmtTS(D.meta.lastUpdated.peers)}</span></div>`) +
+  `<div class="panel" style="padding-block:10px"><div class="eyebrow">Source pages per peer</div>
+    <div class="stack" style="gap:6px;margin-top:6px">${D.peers.map((p,i) => `<div class="row" style="gap:8px"><b style="min-width:56px">${esc(p.ticker || "?")}</b><span data-peerlinks="${i}">${srcLinks(p.ticker, D.meta.exchange, false)}</span></div>`).join("")}</div>
+    <div class="row" style="gap:6px;margin-top:8px"><span class="small muted">Find more peers:</span><a class="btn small-btn" href="https://www.idx.co.id/id/perusahaan-tercatat/profil-perusahaan-tercatat/" target="_blank" rel="noopener">All IDX-listed companies</a><a class="btn small-btn" href="https://finance.yahoo.com/lookup/" target="_blank" rel="noopener">Yahoo Finance search</a></div>
+    <p class="small muted" style="margin-top:4px">Per peer: price → Yahoo quote; shares, EPS, book value per share → Yahoo statistics or the annual report on IDX; debt and cash → balance sheet.</p></div>
+  <div class="panel"><div class="tbl-wrap"><table class="tbl-edit"><thead><tr>${PEER_COLS.map(c=>`<th>${c[1]}</th>`).join("")}<th></th></tr></thead><tbody>${body}</tbody></table></div></div><div id="live-peers">${peerMult()}</div>`;
+};
+function peerMult(){
+  if (!R) return ""; return `<div class="panel"><h3>Observed multiples</h3><div class="tbl-wrap"><table><thead><tr><th>Peer</th><th class="n">Market cap (${esc(CUR())} bn)</th><th class="n">P/E</th><th class="n">P/BV</th><th class="n">EV/EBITDA</th><th class="n">Book D/E</th><th>Status</th></tr></thead><tbody>
+    ${R.relative.rows.map((r,i) => `<tr><td>${esc(r.ticker)}</td><td class="n">${bn(r.mcap)}</td><td class="n">${mx(r.pe)}</td><td class="n">${mx(r.pbv)}</td><td class="n">${r.evEbitda?mx(r.evEbitda):"–"}</td><td class="n">${f2(r.bookDE)}</td>
+      <td class="small">${r.pe==null?`<span class="status warn">${ICON.warn}P/E invalid (loss) – excluded</span>`:(D.peers[i].audited?"":`<span class="status warn">${ICON.warn}Unaudited source</span>`)}</td></tr>`).join("")}</tbody></table></div></div>`;
+}
+
+const DRV = [["growth","Revenue growth","pct"],["ebitdaMargin","EBITDA margin","pct"],["daPct","D&A % of revenue","pct"],["s2c","Sales-to-capital","num"]];
+V.assumptions = () => {
+  const A = D.assumptions, Y = A.forecastYears, src = D.assumptionSources || {};
+  const blocks = DRV.map(([k,l,kind]) => `<div class="panel"><div class="panel-head"><h3>${l}</h3><span class="src">${esc(src[k]||"")}</span></div><div class="tbl-wrap"><table class="tbl-edit"><thead><tr><th>Scenario</th>${Y.map(y=>`<th class="n">${y}</th>`).join("")}</tr></thead><tbody>
+    ${["bear","base","bull"].map(s => `<tr><td class="lbl">${A.scenarios[s].label}</td>${Y.map((_,i)=>`<td style="min-width:84px">${numInput(`assumptions.scenarios.${s}.${k}.${i}`,kind,{label:`${l} ${s} ${Y[i]}`})}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>`).join("");
+  return head("Forecast & scenarios", "Drivers for the five-year FCFF forecast. Each scenario is a complete, internally consistent set of drivers; the model values all three at once.",
+    `<span class="muted small">Last updated ${fmtTS(A ? D.meta.lastUpdated.assumptions : "")}</span>`) + fcPanel() +
+  `<div class="panel"><h3>Scenario settings</h3><div class="tbl-wrap"><table class="tbl-edit"><thead><tr><th>Scenario</th><th class="n">Probability</th><th class="n">Terminal growth</th><th class="n">WACC overlay</th></tr></thead><tbody>
+    ${["bear","base","bull"].map(s => `<tr><td class="lbl">${A.scenarios[s].label}</td><td>${numInput(`assumptions.scenarios.${s}.probability`,"pct",{label:"probability "+s})}</td><td>${numInput(`assumptions.scenarios.${s}.gTerminal`,"pct",{label:"g "+s})}</td><td>${numInput(`assumptions.scenarios.${s}.waccAdj`,"pct",{label:"WACC overlay "+s})}</td></tr>`).join("")}
+    </tbody></table></div><p class="src" style="margin-top:6px">${esc(src.gTerminal||"")} ${esc(src.waccAdj||"")}</p>
+    <div class="form-grid" style="margin-top:10px">${field("Terminal RONIC premium over WACC", numInput("assumptions.ronicPremium","pct",{label:"RONIC premium"}), "%", src.ronicPremium)}</div></div>` + blocks +
+  `<div class="note small">${esc(src.consensus||"")}</div>`;
+};
+
+V.rules = () => {
+  const s = (p,l,u,kind="pct",src) => field(l, numInput("assumptions."+p, kind, {label:l}), u, src);
+  return head("Decision rules", "Thresholds behind the recommendation, the validation checks and the method selector. Change them to test how sensitive the conclusion is to the rules themselves.") +
+  `<div class="panel"><h3>Recommendation</h3><div class="form-grid">
+    ${s("buy","BUY threshold (upside ≥)","%")}${s("sell","SELL threshold (upside ≤)","%")}
+    ${s("agreeHigh","Methods agree if gap ≤","%")}${s("agreeLow","Low conviction if gap >","%")}
+    ${s("reverseTol","Reverse-DCF tolerance for HOLD","pp")}</div></div>
+  <div class="panel"><h3>Method selector and checks</h3><div class="form-grid">
+    ${s("capexHeavy","Asset-heavy if net capex / revenue ≥","%")}${s("maxG","Terminal growth cap (long-run GDP)","%")}
+    ${s("staleDays","Price is stale after","days","num")}</div></div>`;
+};
+
+V.market = () => {
+  if (!R) return head("Market value") + suspendedNote();
+  const m = D.market, H = R.hist, W = R.wacc, rv = R.reverse, mev = W.mcap + H.debtL - H.cashL + H.nciL;
+  const pts = [0.19,0.21,0.23,0.25,0.27].map(mm => [mm, BirdEngine.dcf(D, H, W, D.assumptions.scenarios.base, {margin:mm}).vps]);
+  return head("Market value analysis", `What the market pays for ${esc(TK())} on ${esc(m.priceDate)}, and what that price implies about future performance.`) +
+  `<div class="grid g2">
+    <div class="panel"><h3>Observed market valuation</h3><table><tbody>
+      <tr><td>Share price</td><td class="n">${CUR()} ${f0(m.price)}</td></tr><tr><td>× Shares outstanding (mn)</td><td class="n">${f1(m.sharesMn)}</td></tr>
+      <tr class="total"><td>Market capitalisation (${esc(CUR())} bn)</td><td class="n">${bn(W.mcap)}</td></tr>
+      <tr><td>+ Debt (bank loans + leases)</td><td class="n">${bn(H.debtL)}</td></tr><tr><td>− Cash</td><td class="n">${bn(H.cashL)}</td></tr><tr><td>+ Non-controlling interests</td><td class="n">${bn(H.nciL)}</td></tr>
+      <tr class="total"><td>Market enterprise value (${esc(CUR())} bn)</td><td class="n">${bn(mev)}</td></tr>
+      <tr><td>EV / EBITDA ${D.financials.years[H.L]}</td><td class="n">${mx(mev/H.ebitda[H.L])}</td></tr><tr><td>P / E ${D.financials.years[H.L]}</td><td class="n">${mx(m.price/H.eps)}</td></tr>
+      <tr><td>P / BV ${D.financials.years[H.L]}</td><td class="n">${mx(m.price/H.bvps)}</td></tr><tr><td>Dividend yield (last paid)</td><td class="n">${p1(D.financials.dividends[H.L]/W.mcap)}</td></tr></tbody></table>
+      <p class="small muted" style="margin-top:8px">${m.price/H.bvps < 1 ? (H.roe < W.ke ? `P/BV below 1 is consistent with ROE (${p1(H.roe)}) below the cost of equity (${p1(W.ke)}): the market does not pay book value for capital that earns less than it costs.` : `P/BV is below 1 although ROE (${p1(H.roe)}) exceeds the cost of equity (${p1(W.ke)}): a possible sign of undervaluation or of expected falling returns.`) : (H.roe > W.ke ? `P/BV above 1 is consistent with ROE (${p1(H.roe)}) above the cost of equity (${p1(W.ke)}).` : `P/BV is above 1 although ROE (${p1(H.roe)}) is below the cost of equity (${p1(W.ke)}): the market expects returns to improve.`)}</p></div>
+    <div class="panel"><h3>Reverse DCF: what the price implies</h3>
+      <div class="grid g2" style="gap:10px"><div><div class="eyebrow">Implied EBITDA margin</div><div class="callout-num">${p1(rv.impliedMargin)}</div><div class="small muted">delivered ${p1(rv.deliveredMargin)} · cushion ${sp1(rv.cushion)}</div></div>
+      <div><div class="eyebrow">Implied WACC</div><div class="callout-num">${p2(rv.impliedWacc)}</div><div class="small muted">model WACC ${p2(R.dcf.base.wacc)}</div></div></div>
+      <p style="margin-top:10px">${Math.abs(rv.cushion) <= D.assumptions.reverseTol ? `The price requires roughly the margin ${esc(TK())} already earns: the market prices it close to fair value on today's economics.` : rv.cushion > 0 ? `The price requires a lower margin than ${esc(TK())} delivers: the market prices in margin erosion.` : `The price requires a higher margin than ${esc(TK())} delivers: the market prices in improvement.`}</p>
+      <table style="margin-top:10px"><thead><tr><th>Uniform EBITDA margin</th><th class="n">DCF value / share</th><th class="n">vs price</th></tr></thead><tbody>
+      ${pts.map(([mm,v]) => `<tr><td>${p1(mm)}</td><td class="n">${f0(v)}</td><td class="n">${sp1(v/m.price-1)}</td></tr>`).join("")}</tbody></table>
+      <p class="small muted" style="margin-top:6px">Base-case growth, sales-to-capital, WACC and terminal growth held constant; value is linear in margin, so two points solve it exactly. Implied WACC solved by bisection.</p></div>
+  </div>`;
+};
+
+V.dcf = () => {
+  if (!R) return head("DCF") + suspendedNote();
+  const W = R.wacc, m = D.market, sc = D.assumptions.scenarios[activeSc], d = R.dcf[activeSc], Y = D.assumptions.forecastYears, H = R.hist;
+  const seg = `<div class="seg" role="group" aria-label="Scenario">${["bear","base","bull"].map(k => `<button data-act="sc" data-sc="${k}" aria-pressed="${k===activeSc}">${D.assumptions.scenarios[k].label}</button>`).join("")}</div>`;
+  const row = (l, arr, fmt=bn, cls="") => `<tr class="${cls}"><td class="lbl">${l}</td>${arr.map(v=>`<td class="n">${fmt(v)}</td>`).join("")}</tr>`;
+  return head("Discounted cash flow (FCFF)", "Free cash flow to the firm, discounted at WACC. Reinvestment is tied to growth through the sales-to-capital ratio, so growth is never free.", seg) +
+  `<div class="grid g2">
+    <div class="panel"><h3>Cost of capital</h3><table><tbody>
+      <tr><td>Risk-free rate</td><td class="n">${p2(m.rf)}</td></tr><tr><td>Unlevered beta (sector, cash-corrected)</td><td class="n">${f2(m.betaU)}</td></tr>
+      <tr><td>Market D/E</td><td class="n">${p1(W.de)}</td></tr><tr><td>Levered beta = βu × (1 + (1 − t) × D/E)</td><td class="n">${f2(W.betaL)}</td></tr>
+      <tr><td>Equity risk premium</td><td class="n">${p2(m.erp)}</td></tr><tr class="total"><td>Cost of equity</td><td class="n">${p2(W.ke)}</td></tr>
+      <tr><td>Cost of debt pre-tax (Rf + ${p2(m.kdSpread)})</td><td class="n">${p2(W.kd)}</td></tr><tr><td>Cost of debt after tax</td><td class="n">${p2(W.kdAT)}</td></tr>
+      <tr><td>Weights E / D</td><td class="n">${p1(W.we)} / ${p1(W.wd)}</td></tr><tr class="total"><td>WACC</td><td class="n">${p2(W.wacc)}</td></tr>
+      ${sc.waccAdj ? `<tr><td>${sc.label} scenario overlay</td><td class="n">${sp1(sc.waccAdj)}</td></tr><tr class="total"><td>WACC used (${sc.label})</td><td class="n">${p2(d.wacc)}</td></tr>`:""}</tbody></table></div>
+    <div class="panel"><h3>Equity bridge · ${sc.label}</h3><table><tbody>
+      <tr><td>PV of FCFF ${Y[0]}–${Y[Y.length-1]}</td><td class="n">${bn(d.sumPV)}</td></tr>
+      <tr><td>Terminal value (end ${Y[Y.length-1]}) = FCFF<sub>T+1</sub> / (WACC − g)</td><td class="n">${bn(d.tv)}</td></tr>
+      <tr><td>PV of terminal value</td><td class="n">${bn(d.pvTV)}</td></tr><tr class="total"><td>Enterprise value (${esc(CUR())} bn)</td><td class="n">${bn(d.ev)}</td></tr>
+      <tr><td>− Debt</td><td class="n">${bn(H.debtL)}</td></tr><tr><td>+ Cash</td><td class="n">${bn(H.cashL)}</td></tr><tr><td>− Non-controlling interests</td><td class="n">${bn(H.nciL)}</td></tr>
+      <tr class="total"><td>Equity value to parent (${esc(CUR())} bn)</td><td class="n">${bn(d.equity)}</td></tr><tr class="total"><td>Value per share (${esc(CUR())})</td><td class="n">${f0(d.vps)}</td></tr>
+      <tr><td>Terminal value share of EV</td><td class="n">${p0(d.tvShare)}</td></tr><tr><td>Terminal growth g / RONIC</td><td class="n">${p2(d.g)} / ${p2(d.ronic)}</td></tr>
+      <tr><td>Terminal reinvestment rate = g / RONIC</td><td class="n">${p1(d.termReinvRate)}</td></tr></tbody></table></div>
+  </div>
+  <div class="panel"><h3>Forecast · ${sc.label} (${esc(CUR())} bn)</h3><div class="tbl-wrap"><table><thead><tr><th></th><th class="n">${D.financials.years[H.L]}A</th>${Y.map(y=>`<th class="n">${y}E</th>`).join("")}</tr></thead><tbody>
+    ${row("Revenue",[H.revL].concat(d.rev))}${row("Revenue growth",[H.growth[H.L]].concat(sc.growth),p1,"sub")}
+    ${row("EBITDA",[H.ebitda[H.L]].concat(d.ebitda))}${row("EBITDA margin",[H.ebitdaMargin].concat(sc.ebitdaMargin),p1,"sub")}
+    ${row("EBIT",[D.financials.ebit[H.L]].concat(d.ebit))}${row("NOPAT = EBIT × (1 − t)",[D.financials.ebit[H.L]*(1-m.tax)].concat(d.nopat))}
+    ${row("Reinvestment = ΔRevenue / sales-to-capital",[H.reinv[H.L]].concat(d.reinv))}${row("Sales-to-capital",[NaN].concat(sc.s2c),f2,"sub")}
+    ${row("FCFF",[H.fcff[H.L]].concat(d.fcff),bn,"total")}${row("Discount factor",[NaN].concat(d.df),v=>isNum(v)?v.toFixed(4):"",'sub')}
+    ${row("PV of FCFF",[NaN].concat(d.pv))}${row("Return on new capital",[NaN].concat(d.rnc),p1,"sub")}</tbody></table></div>
+    <div style="margin-top:12px">${legend([["var(--s1)","FCFF ("+CUR()+" bn)"]])}${barsChart([D.financials.years[H.L]+"A"].concat(Y.map(y=>y+"E")), [{name:"FCFF", color:"var(--s1)", values:[H.fcff[H.L]/1000].concat(d.fcff.map(v=>v/1000))}], {aria:"FCFF by year in "+CUR()+" bn", h:200})}</div>
+    <p class="small muted">Return on new capital (NOPAT margin × sales-to-capital) ${d.rnc[0] < d.wacc ? "is below" : "exceeds"} WACC, so in this scenario faster growth ${d.rnc[0] < d.wacc ? "lowers" : "raises"} value. FY${D.financials.years[H.L]} FCFF was ${H.fcff[H.L] < 0 ? `negative (${CUR()} ${bn(H.fcff[H.L])}bn) because net reinvestment of ${CUR()} ${bn(H.reinv[H.L])}bn exceeded NOPAT` : `${CUR()} ${bn(H.fcff[H.L])}bn after net reinvestment of ${CUR()} ${bn(H.reinv[H.L])}bn`}.</p></div>`;
+};
+
+V.relative = () => {
+  if (!R) return head("Relative valuation") + suspendedNote();
+  const RL = R.relative, M = RL.methods, H = R.hist, m = D.market;
+  const lab = {pe:"P/E", pbv:"P/BV", eve:"EV/EBITDA"}, base = {pe:`EPS ${f0(H.eps)}`, pbv:`BVPS ${f0(H.bvps)}`, eve:`EBITDA ${CUR()} ${bn(H.ebitda[H.L])}bn → equity bridge`};
+  return head("Relative valuation", `${esc(TK())}'s own FY${D.financials.years[R.hist.L]} fundamentals × peer median multiples. Each multiple is weighted by the number of peers that support it.`) +
+  `<div class="panel"><h3>Implied value by multiple</h3><div class="tbl-wrap"><table><thead><tr><th>Multiple</th><th class="n">Peers</th><th class="n">Min</th><th class="n">Median</th><th class="n">Max</th><th>Applied to</th><th class="n">Value / share</th><th class="n">Weight</th></tr></thead><tbody>
+    ${Object.keys(M).map(k => `<tr><td>${lab[k]}</td><td class="n">${M[k].n}</td><td class="n">${mx(M[k].min)}</td><td class="n">${mx(M[k].median)}</td><td class="n">${mx(M[k].max)}</td><td class="small">${base[k]}</td><td class="n">${f0(M[k].value)}</td><td class="n">${p1(M[k].weight)}</td></tr>`).join("")}
+    <tr class="total"><td colspan="6">Relative value per share (weighted)</td><td class="n">${f0(RL.value)}</td><td class="n">100%</td></tr></tbody></table></div>
+    <p class="small muted" style="margin-top:8px">Equity multiples (P/E, P/BV) are applied to parent-company EPS and book value. EV/EBITDA gives an enterprise value that is bridged to equity (− debt + cash − NCI). Multiples from loss-making peers are excluded as invalid.</p></div>
+  <div class="grid g2"><div class="panel"><h3>Peer comparability</h3><dl class="kvlist">
+    <dt>${esc(TK())} market cap</dt><dd>${CUR()} ${bn(R.wacc.mcap)}bn</dd><dt>Median peer market cap</dt><dd>${CUR()} ${bn(RL.peerMcapMedian)}bn</dd>
+    <dt>${esc(TK())} book D/E</dt><dd>${f2(H.bookDE)}</dd><dt>Median peer book D/E</dt><dd>${f2(RL.peerBookDEMedian)}</dd>
+    <dt>${esc(TK())} revenue growth</dt><dd>${p1(H.growth[H.L])}</dd><dt>Median peer revenue growth</dt><dd>${p1(RL.peerRevGrowthMedian)}</dd>
+    <dt>P/E dispersion (CV)</dt><dd>${f2(RL.cvPE)}</dd></dl></div>
+  <div class="panel"><h3>Reading</h3><p>${esc(D.meta.ticker)} trades at ${mx(m.price/H.eps)} earnings versus a peer median of ${mx(M.pe.median)} (${m.price/H.eps < M.pe.median ? "a discount" : "a premium"}), and at ${mx(m.price/H.bvps)} book versus ${mx(M.pbv.median)} (${m.price/H.bvps < M.pbv.median ? "a discount" : "a premium"}). The median peer is about ${f0(R.wacc.mcap/RL.peerMcapMedian)}x smaller, ${p0(D.peers.filter(p=>p.closeModel).length/Math.max(1,D.peers.length))} of peers have a close business model, and ${peerProfitText()}. On these facts the method selector gives multiples ${p1(R.selector.wREL)} of the weight.</p></div></div>`;
+};
+
+V.selector = () => {
+  if (!R) return head("Method selection") + suspendedNote();
+  const S = R.selector;
+  return head("Valuation approach selection", "Seven transparent tests score how well each approach fits this company. Fitness = points ÷ maximum; weight = fitness share. The weights feed the blended value directly.") +
+  `<div class="grid g3">
+    <div class="panel"><div class="eyebrow">DCF fitness</div><div class="callout-num" style="color:var(--s1)">${f1(S.scoreDCF)} / ${S.maxDCF}</div><div class="muted small">${p0(S.fitDCF)} → weight ${p1(S.wDCF)}</div></div>
+    <div class="panel"><div class="eyebrow">Multiples fitness</div><div class="callout-num" style="color:var(--s2)">${f1(S.scoreREL)} / ${S.maxREL}</div><div class="muted small">${p0(S.fitREL)} → weight ${p1(S.wREL)}</div></div>
+    <div class="panel"><div class="eyebrow">Selected approach</div><div class="callout-num">${S.primary}</div><div class="muted small">DCF-led ≥ 60% · Multiples-led ≤ 40% DCF weight</div></div></div>
+  <div class="panel"><h3>Factor scores</h3>${legend([["var(--s1)","DCF points"],["var(--s2)","Multiples points"]])}<div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>Factor</th><th>Evidence (this company)</th><th class="n">DCF</th><th class="n">Multiples</th><th style="min-width:140px">Points</th></tr></thead><tbody>
+    ${S.factors.map(f => `<tr><td><b>${f.id}</b> ${esc(f.name)}<div class="src" style="max-width:46ch">${esc(f.rule)}</div></td><td class="small">${esc(f.evidence)}</td>
+      <td class="n">${f.dmax?f1(f.dcf)+" / "+f.dmax:"n/a"}</td><td class="n">${f1(f.rel)} / ${f.rmax}</td>
+      <td><span class="bar-inline" style="width:${f.dmax?f.dcf/20*100:0}%;background:var(--s1)"></span><span class="bar-inline" style="width:${f.rel/20*100}%;background:var(--s2);margin-top:3px"></span></td></tr>`).join("")}
+    <tr class="total"><td colspan="2">Total</td><td class="n">${f1(S.scoreDCF)} / ${S.maxDCF}</td><td class="n">${f1(S.scoreREL)} / ${S.maxREL}</td><td></td></tr></tbody></table></div></div>
+  <div class="panel"><h3>When each approach deserves more weight</h3><div class="grid g2">
+    <div><b style="color:var(--s1)">DCF gets more weight when</b><ul class="plain small" style="margin-top:6px"><li>the firm is profitable with stable margins and an established growth path (F2, F3);</li><li>reinvestment drives value, as in asset-heavy businesses (F1);</li><li>audited statements and guidance make forecasts traceable (F4);</li><li>the terminal value is a modest share of EV (F7).</li></ul></div>
+    <div><b style="color:var(--s2)">Multiples get more weight when</b><ul class="plain small" style="margin-top:6px"><li>there are many listed peers of similar size and business model (F1, F5);</li><li>peer earnings are normal, not depressed or negative (F3);</li><li>leverage is similar, so equity multiples compare like with like (F6);</li><li>multiples cluster tightly (F7); for banks and insurers, P/BV replaces FCFF (F1, F6).</li></ul></div></div>
+    <p style="margin-top:10px">${esc((() => { const H = R.hist, lead = S.fitDCF >= S.fitREL ? "DCF" : "multiples";
+      return `For ${D.meta.ticker} the ${lead === "DCF" ? "DCF" : "multiples approach"} is the stronger tool. DCF fit ${p0(S.fitDCF)}: EBIT was positive in ${H.posEbitYears} of ${H.n} years, the EBIT margin moved by ${p2(H.sdMargin)} (s.d.), net reinvestment is ${p1(H.capexIntensity)} of revenue, and terminal value is ${p0(R.dcf.base.tvShare)} of EV. Multiples fit ${p0(S.fitREL)}: the median peer is ${f0(R.wacc.mcap/R.relative.peerMcapMedian)}x smaller, ${p0(D.peers.filter(p=>p.closeModel).length/Math.max(1,D.peers.length))} of peers have a close business model, ${peerProfitText()}, and P/E dispersion is ${R.relative.cvPE==null?"not measurable":"CV "+f2(R.relative.cvPE)}.`; })())}</p></div>`;
+};
+
+V.sensitivity = () => {
+  if (!R) return head("Scenarios & sensitivity") + suspendedNote();
+  const SN = R.sens, m = D.market, A = D.assumptions, r = R.rec;
+  const grid = `<div class="tbl-wrap"><table class="heat"><thead><tr><th>WACC \\ g</th>${SN.gs.map(g=>`<th class="n">${p1(g)}</th>`).join("")}</tr></thead><tbody>
+    ${SN.waccs.map((w,i) => `<tr><td class="n"><b>${p2(w)}</b></td>${SN.grid[i].map((v,j) => { const u = v/m.price-1, a = Math.min(0.45, Math.abs(u)*0.9);
+      const bg = u >= 0 ? `color-mix(in srgb, var(--good) ${a*100}%, transparent)` : `color-mix(in srgb, var(--bad) ${a*100}%, transparent)`;
+      return `<td class="n ${i===2&&j===2?"base":""}" style="background:${bg}" title="${sp1(u)} vs price">${f0(v)}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>`;
+  return head("Scenarios & sensitivity", "How far the value moves when the key assumptions change.") +
+  `<div class="panel"><h3>Scenario comparison</h3><div class="tbl-wrap"><table><thead><tr><th></th>${["bear","base","bull"].map(k=>`<th class="n">${A.scenarios[k].label}</th>`).join("")}</tr></thead><tbody>
+    <tr><td>Probability</td>${["bear","base","bull"].map(k=>`<td class="n">${p0(A.scenarios[k].probability)}</td>`).join("")}</tr>
+    <tr><td>Revenue growth ${A.forecastYears[0]} → ${A.forecastYears[4]}</td>${["bear","base","bull"].map(k=>`<td class="n">${p1(A.scenarios[k].growth[0])} → ${p1(A.scenarios[k].growth[4])}</td>`).join("")}</tr>
+    <tr><td>EBITDA margin</td>${["bear","base","bull"].map(k=>`<td class="n">${p1(A.scenarios[k].ebitdaMargin[0])}</td>`).join("")}</tr>
+    <tr><td>Sales-to-capital</td>${["bear","base","bull"].map(k=>`<td class="n">${f2(A.scenarios[k].s2c[0])}</td>`).join("")}</tr>
+    <tr><td>WACC / terminal g</td>${["bear","base","bull"].map(k=>`<td class="n">${p2(R.dcf[k].wacc)} / ${p1(R.dcf[k].g)}</td>`).join("")}</tr>
+    <tr><td>DCF value / share</td>${["bear","base","bull"].map(k=>`<td class="n">${f0(R.dcf[k].vps)}</td>`).join("")}</tr>
+    <tr class="total"><td>Blended value / share</td>${["bear","base","bull"].map(k=>`<td class="n">${f0(r.blended[k])}</td>`).join("")}</tr>
+    <tr><td>vs price</td>${["bear","base","bull"].map(k=>`<td class="n">${sp1(r.blended[k]/m.price-1)}</td>`).join("")}</tr></tbody></table></div></div>
+  <div class="panel"><div class="panel-head"><h3>Tornado · blended value per share (Base)</h3>${legend([["var(--s2)","Downside move"],["var(--s1)","Upside move"]])}</div>
+    <div class="tbl-wrap">${tornadoChart(SN.tornado, SN.center)}</div><p class="small muted">Method weights held at the selector result. Centre line = central estimate ${CUR()} ${f0(SN.center)}.</p></div>
+  <div class="panel"><h3>DCF value per share · WACC × terminal growth (Base)</h3>${grid}<p class="small muted" style="margin-top:6px">Green = above the market price, red = below; framed cell = base case. Terminal growth barely matters because new capital earns its cost in the terminal period (RONIC = WACC); WACC is the lever.</p></div>`;
+};
+
+V.checks = () => {
+  const pre = missing.length ? `<div class="panel"><h3>Missing inputs</h3>${suspendedNote()}</div>` : "";
+  const list = R ? R.checks : [];
+  return head("Validation checks", "Automatic tests for material errors. ERROR checks suspend the recommendation; WARN checks lower the conviction and are listed for the reader.",
+    `<button data-act="selftest">Run engine self-test</button>`) + pre +
+  (R ? `<div class="panel"><div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Check</th><th>Type</th><th>Result</th><th>Detail</th></tr></thead><tbody>
+    ${list.map(c => { const [cl, t] = statusOf(c); return `<tr><td class="mono">${c.id}</td><td>${esc(c.name)}</td><td class="small">${c.severity}</td><td><span class="status ${cl}">${ICON[cl]}${t}</span></td><td class="small">${esc(c.detail)}</td></tr>`; }).join("")}</tbody></table></div></div>` : "") +
+  `<div class="panel" id="selftest"><h3>Engine self-test</h3><p class="small muted">Runs this app's JavaScript engine on the original dataset and compares ${PY_REFERENCE.length} key outputs with the independent Python reference engine (engine_ref.py). Your own edits are not affected.</p><div id="selftest-out" style="margin-top:8px"></div></div>`;
+};
+
+V.data = () => {
+  const log = (D.meta.updateLog || []).map(l => `${fmtTS(l.time)}  ${l.section.padEnd(11)} ${l.action}${l.detail?" – "+l.detail:""}`).join("\n") || "No changes yet in this browser.";
+  return head("Import & export", "Update the model from files, value another company, save your dataset, and export the results.") +
+  `<div class="panel"><div class="panel-head"><h3>Company being valued: ${esc(CO())} (${esc(TK())})</h3></div>
+    <p class="small">The engine is company-agnostic. To value another listed company, start a blank dataset and fill the inputs (or import a filled template); the missing-input list guides you. The Blue Bird dataset is the worked example.</p>
+    <div class="row" style="margin-top:8px"><button data-act="newco">Start a new company (blank dataset)</button><button data-act="example">Load example: PT Blue Bird Tbk</button></div></div>
+  <div class="grid g2">
+    <div class="panel stack"><h3>Update data</h3>
+      <p class="small">1. Download the data template (it contains the current figures). 2. Overwrite the values in Excel. 3. Import it here. Sheets: Market, Profile, Financials, Peers, Scenarios, Rules.</p>
+      <div class="row"><button data-act="dl-template">Download data template (.xlsx)</button>
+      <label class="btn file" tabindex="0">Import file (.xlsx / .json / .csv)<input type="file" id="file-in" accept=".xlsx,.json,.csv"></label></div>
+      <p class="small muted">CSV import accepts one table: <code>key,value</code> (market inputs), <code>item,2023,2024,2025</code> (financials) or the peer table with a <code>ticker</code> column.</p>
+      <div id="import-out"></div></div>
+    <div class="panel stack"><h3>Export results</h3>
+      <div class="row"><button class="primary" data-act="dl-pdf">Summary report (.pdf)</button><button data-act="dl-xlsx">Full results (.xlsx)</button></div>
+      <div class="row"><button data-act="dl-csv">Summary (.csv)</button><button data-act="dl-html">Report page (.html)</button><button data-act="dl-json">Dataset (.json)</button></div>
+      <p class="small muted">The dataset file (.json) re-opens the exact model state later via Import. Exports carry the valuation date, calculation timestamp and sources.</p>
+      <div id="dl-out" class="small"></div></div>
+  </div>
+  <div class="panel"><div class="panel-head"><h3>Update log (this browser)</h3><button class="ghost" data-act="reset">Reset to original dataset</button></div><pre class="log">${esc(log)}</pre>
+    <p class="small muted" style="margin-top:6px">Your edits are kept as a draft in this browser only. Export the dataset to keep or share them.</p></div>`;
+};
+
+V.guide = () => head("User guide", `Version ${APP_VERSION}. How to set up, update and read the model.`) + `<div class="panel doc">
+  <h3>1. Access and requirements</h3><p>Open the platform link in any current browser (Chrome, Edge, Safari, Firefox), or open the file <code>valuation_platform.html</code> locally. No installation, account or subscription is needed. An internet connection is needed only for the web fonts and for Excel/PDF import-export (SheetJS and jsPDF load from cdnjs); all valuation calculations run offline in the browser. Data are entered manually or by file upload; there is no live price feed. To make this quick, Market & company, Financial history and Peer data carry links that open the matching pages for the current ticker (Yahoo Finance quote, statistics, income statement, balance sheet, cash flow; for IDX companies also the IDX company profile, IDX financial reports and Stockbit), a company search, and the list of all IDX-listed companies. Each input says where its value is found. A browser page cannot download data from these sites itself (they block it), so the values are copied or imported with the data template.</p>
+  <h3>1a. Data connector: fetch data from IDX and Yahoo with one click</h3><p>A web page may not load data from idx.co.id or Yahoo Finance itself, but a program on your own computer may. <code>data_connector.py</code> is that program: it runs locally (only reachable from your computer at 127.0.0.1:8765), fetches the data in Python and hands it to the platform.</p>
+  <ol class="plain"><li>Once, in Terminal: <code>pip3 install yfinance openpyxl pandas curl_cffi tabulate</code>. For audited IDX filings also: <code>git clone https://github.com/celeebi/IDX_GetFinancialStatement</code> into the platform folder (open-source package by celeebi, MIT licence).</li>
+  <li>Start: <code>python3 data_connector.py</code> (finds the IDX package automatically in the same folder, or use <code>--idx-repo &lt;folder&gt;</code>). Keep the window open.</li>
+  <li>Open <code>valuation_platform.html</code> → Market & company → <i>Fetch data automatically</i>: the status shows <i>Connected</i>. Search a company by name or ticker (IDX company list and Yahoo search), click <i>Value this company</i>, add peers with <i>Add as peer</i>, choose the source of the statements (IDX audited filings or Yahoo) and click <i>Fetch data and recalculate</i>.</li></ol>
+  <p>What is filled: company name, currency, share price on the valuation date, shares outstanding, regression beta, three fiscal years of statements, all peer data. Statements from IDX come from the audited XBRL filings; any line the filing lacks (e.g. EPS, lease liabilities, asset-sale proceeds, non-controlling interests) is taken from Yahoo, and a list shows the source of every line. Suggested, applied only when you tick them: equity risk premium and statutory tax rate of the country (Damodaran country risk premiums), unlevered beta corrected for cash of the chosen industry in the company's region (Damodaran betas by sector; the industry is pre-selected from Yahoo's classification and can be changed), debt spread from the synthetic rating implied by interest cover (EBIT ÷ interest expense, Damodaran rating table), and for US-dollar companies the 10-year Treasury yield as risk-free rate. The risk-free rate in other currencies is entered by hand (10-year government bond yield). On Forecast & scenarios, <i>Suggest from history</i> derives starting drivers (last revenue growth fading to terminal growth, two-year EBITDA margin, D&A share, marginal sales-to-capital, Bear/Bull spreads) – shown with their derivation and applied only on click. Peer flags you set (audited, close model) are kept. When you switch to another company, lines the source does not deliver are cleared and highlighted, so no number of the previous company survives. The online link cannot reach your computer; use the offline file. The IDX package works around IDX's bot protection and Yahoo is unofficial, so both can stop working without notice; the manual links and the data template remain as fallback.</p>
+  <h3>1b. Automatic retrieval from Yahoo Finance into an Excel file</h3><p>The package contains <code>fetch_yahoo.py</code>. It retrieves the share price on the valuation date, shares outstanding, regression beta, effective tax rate, three fiscal years of income statement, balance sheet and cash flow, and the peer data (price, shares, EPS, book value per share, growth, debt, cash, EV/EBITDA), converts them to million units and writes an Excel file in the platform's import format.</p>
+  <ol class="plain"><li>Once: install Python 3, then in Terminal <code>pip3 install yfinance openpyxl</code>.</li>
+  <li>In the folder with the script: <code>python3 fetch_yahoo.py BIRD --exchange IDX --peers WEHA LRNA BPTR JAYA --date 2026-10-23</code> (any ticker and exchange, e.g. <code>AAPL --exchange NASDAQ --peers MSFT GOOGL</code>).</li>
+  <li>Import & export → <i>Import file</i> → choose the written <code>…_yahoo_import_….xlsx</code>. Everything recalculates.</li></ol>
+  <p>Not on Yahoo and therefore kept as they are: risk-free rate, equity risk premium, unlevered beta, debt spread and the forecast assumptions. Lines Yahoo does not report are not written, so existing values stay. The Notes sheet and the terminal list every gap. Yahoo figures are unaudited aggregations: check revenue, EBIT, net income and debt against the annual report on IDX. The script needs internet access; Yahoo is free but may limit or change its interface without notice.</p>
+  <h3>2. Layout</h3><p><b>Results</b> (dashboard, recommendation) → <b>Inputs</b> (market, financial history, peers, forecast & scenarios, decision rules) → <b>Valuation</b> (market value, DCF, relative, method selection, sensitivity) → <b>Control</b> (checks, import/export, this guide). Inputs, assumptions, calculation logic and outputs are separated: inputs are only edited on Input views; every other view is calculated.</p>
+  <h3>3. Updating the model</h3><ol class="plain"><li><b>Another company:</b> Import & export → <i>Start a new company</i> (blank dataset), then fill Market & company (name, ticker, currency), Financial history, Peer data and Forecast & scenarios, or import a filled data template. The highlighted missing inputs work as a checklist; the model runs as soon as they are complete. <i>Load example</i> brings back the Blue Bird case.</li>
+  <li><b>New share price:</b> Market & company → Share price and Price date; set the Valuation date. Peer prices on Peer data.</li>
+  <li><b>New annual report:</b> Financial history → <i>Roll forward one year</i> (drops the oldest year, opens an empty column), then type or import the new figures. Missing cells are highlighted and the recommendation pauses until they are filled.</li>
+  <li><b>Bulk update:</b> Import & export → download the data template, edit in Excel, import. JSON datasets restore a complete saved state.</li>
+  <li><b>Assumptions:</b> Forecast & scenarios (drivers per scenario and year) and Decision rules (thresholds).</li>
+  <li>Every change recalculates all views, scenarios, checks and the recommendation instantly; <i>Recalculate</i> forces a full run. Each input section carries a last-updated timestamp, and the update log records changes.</li></ol>
+  <h3>4. Units and conventions</h3><p>Money in million of the dataset currency (Market & company → Currency); per-share values in that currency; shares in million. Percentages are typed as percent (7.2 = 7.2%). Thousands separators are allowed in number fields. Fiscal year = calendar year.</p>
+  <h3>5. Calculations</h3><div class="formula">WACC     = E/(D+E)·[Rf + βL·ERP] + D/(D+E)·(Rf + spread)·(1−t),  βL = βu·(1 + (1−t)·D/E)
+FCFF_t   = Revenue_t·(EBITDA% − D&A%)·(1−t) − (Revenue_t − Revenue_t−1) / sales-to-capital
+TV       = NOPAT_T·(1+g)·(1 − g/RONIC) / (WACC − g),  RONIC = WACC + premium
+Equity   = Σ PV(FCFF) + PV(TV) − debt + cash − NCI;   value/share = equity / shares
+Relative = Σ w_k · (peer median multiple_k × company metric_k),  w_k ∝ usable peers
+Blended  = w_DCF · DCF + w_REL · Relative,  weights from the method selector
+Signal   = BUY if upside ≥ 15%, SELL if ≤ −15%, else HOLD (editable)</div>
+  <h3>6. Outputs</h3><p>Dashboard: recommendation and conviction, central estimate (Base, blended), fair-value range (Bear to Bull, blended), market price, implied upside, method values and weights, decision criteria, checks, risks. Exports: PDF summary, full results workbook, CSV, HTML report page and the dataset.</p>
+  <h3>7. Known limitations</h3><ul class="plain"><li>Three fiscal years of history; D&A, capex, debt and working capital are needed for the latest two.</li><li>Peer quality decides the weight of multiples; in the Blue Bird example the peer set is small, one peer is unaudited and EV/EBITDA rests on one peer.</li><li>No live market-data connection; prices must be refreshed by hand or by file.</li><li>One currency per dataset, annual periods only; FCFF DCF is not suited to banks (the profile switch sets its weight to zero).</li><li>Drafts are stored only in the current browser; use the dataset export to keep them.</li></ul></div>`;
+
+V.about = () => head("Method & AI disclosure", "What the engine does, how it was checked, and how AI was used.") + `<div class="grid g2">
+  <div class="panel doc"><h3>Calculation engine</h3><p>The platform runs its own JavaScript valuation engine (pure functions, no server). An independent Python implementation of the same rules (<code>engine_ref.py</code>) serves as the reference. Before release both engines were run on the original dataset (538 outputs compared, 0 differences beyond 1e-9) and on 25 randomly perturbed datasets (prices, betas, tax, margins, sales-to-capital, a financial-firm flag, stale prices, invalid terminal growth): all agreed. The <a href="#checks">self-test</a> repeats the comparison in your browser.</p>
+  <h3>Data sources of the example dataset (PT Blue Bird Tbk)</h3><p class="small muted">The engine is company-agnostic; these sources belong to the worked example. A new dataset carries its own source notes under each input.</p><ul class="plain small"><li>Financial statements: PT Blue Bird Tbk Annual & Sustainability Report 2025 (audited consolidated statements; Notes 10, 14, 19, 22, 23).</li><li>Prices: Ajaib / akufrugal.com quotes, 23 Oct 2026.</li><li>Rf: BRIDS Daily Fixed Income Update (INDOGB 10Y, 6 Oct 2026). ERP and sector beta: Damodaran, January 2026.</li><li>Peers: FY2025 annual reports of LRNA, BPTR, JAYA; WEHA from stockanalysis.com.</li><li>Consensus: MarketScreener (3 analysts), accessed 17 Oct 2026.</li></ul></div>
+  <div class="panel doc"><h3>AI disclosure</h3><p><b>Tool used:</b> Claude (Anthropic), through the Claude app.</p>
+  <p><b>Tasks supported:</b> locating and extracting figures from the 410-page annual report; writing the JavaScript engine, the Python reference engine and this interface; drafting the method-selection rules, checks and documentation for review.</p>
+  <p><b>How outputs were checked:</b> every input figure traced to a note or page of the annual report and re-added (A = L + E and EPS = profit ÷ shares are tested automatically); cross-engine test (JavaScript vs Python) on 538 outputs and 25 perturbed datasets; spot checks by hand (EBITDA = EBIT + D&A = 687 + 651 = IDR 1,339bn; WACC build-up); validation checks C01–C17 run on every recalculation.</p>
+  <p><b>Corrections made:</b> an earlier version backed BIRD's EBITDA out of an assumed multiple (IDR 1,243bn); it was replaced by the reported figure (IDR 1,339bn). Share and peer prices were refreshed from late September to 23 October 2026. A formatting error in the earlier P/E range output was removed.</p>
+  <p><b>Limitations:</b> AI drafted code and text; the author is responsible for every assumption, source and conclusion and has reviewed the calculation logic. Forecast drivers and decision thresholds are judgments, shown as editable inputs.</p></div></div>`;
+
+/* ---------------- rendering ---------------- */
+function renderView(){
+  const main = document.getElementById("main");
+  main.innerHTML = (V[view] || V.dashboard)();
+  markMissing();
+  if (view === "checks" && selfTestResult) showSelfTest();
+}
+function refreshResultBits(){
+  // after an edit on an input view: keep the input table in place, refresh only calculated fragments
+  if (!["inputs","financials","peers","assumptions","rules","data"].includes(view)) { renderView(); return; }
+  const d = document.getElementById("live-derived"); if (d) d.innerHTML = finDerived();
+  const p = document.getElementById("live-peers"); if (p) p.innerHTML = peerMult();
+  markMissing();
+}
+function markMissing(){
+  const miss = new Set(missing.map(m => m.path));
+  document.querySelectorAll("input.cell[data-path]").forEach(el => el.classList.toggle("missing", miss.has(el.dataset.path)));
+}
+function route(){
+  const h = (location.hash || "").slice(1);
+  view = V[h] ? h : "dashboard"; renderRail(); renderView(); window.scrollTo(0, 0);
+}
+
+/* ---------------- input handling ---------------- */
+function parseInput(raw, kind){
+  const s = String(raw).trim(); if (s === "") return null;
+  if (kind === "pct") { const v = parseFloat(s.replace(/\s|%/g,"").replace(",", ".")); return Number.isFinite(v) ? v/100 : NaN; }
+  const v = parseFloat(s.replace(/[\s,]/g,"")); return Number.isFinite(v) ? v : NaN;
+}
+document.addEventListener("change", e => {
+  const el = e.target;
+  if (el.id === "file-in") { if (el.files && el.files[0]) importFile(el.files[0]); el.value = ""; return; }
+  if (el.id === "conn-ind") { conn.ind = el.value; connRender(); return; }
+  const path = el.dataset && el.dataset.path; if (!path) return;
+  const kind = el.dataset.kind; let v;
+  if (kind === "bool") v = el.checked;
+  else if (kind === "text" || kind === "date") v = el.value.trim();
+  else { v = parseInput(el.value, kind); if (Number.isNaN(v)) { el.classList.add("missing"); toast(`“${el.value}” is not a number. Use digits, a decimal point and optional thousands separators.`); return; } }
+  const old = getPath(D, path); setPath(D, path, v);
+  el.classList.add("changed");
+  const sec = path.startsWith("meta.") ? "market" : SECTION(path); touch(sec);
+  logUpdate(sec, "edit", `${path}: ${old ?? "blank"} → ${v ?? "blank"}`);
+  recalc({render:false});
+  if (/^meta\.(ticker|exchange)$/.test(path) || /^peers\.\d+\.ticker$/.test(path)) refreshLinks();
+});
+function refreshLinks(){
+  const c = document.getElementById("co-links"); if (c) c.innerHTML = srcLinks(D.meta.ticker, D.meta.exchange, true) || '<span class="muted small">Enter a ticker to get the links.</span>';
+  document.querySelectorAll("[data-peerlinks]").forEach(td => { const p = D.peers[+td.dataset.peerlinks]; if (p) td.innerHTML = srcLinks(p.ticker, D.meta.exchange, false); });
+}
+document.addEventListener("click", e => {
+  const a = e.target.closest("[data-act]"); if (!a) return; const act = a.dataset.act;
+  if (act === "recalc") { recalc(); toast("Recalculated all valuations, scenarios and checks."); }
+  else if (act === "sc") { activeSc = a.dataset.sc; renderView(); }
+  else if (act === "addpeer") { D.peers.push({ticker:"NEW",name:"",price:null,priceDate:D.meta.valuationDate,sharesMn:null,eps:null,bvps:null,revGrowth:null,niGrowth:null,debt:null,cash:null,evEbitda:null,audited:true,closeModel:false,source:""}); touch("peers"); logUpdate("peers","add peer",""); recalc(); }
+  else if (act === "delpeer") { const i = +a.dataset.i, t = D.peers[i].ticker; D.peers.splice(i,1); touch("peers"); logUpdate("peers","remove peer",t); recalc(); toast(`Removed ${t}.`); }
+  else if (act === "conn-check") connCheck();
+  else if (act === "conn-apply-sugg") applySugg();
+  else if (act === "fc-suggest") { fcSugg = suggestForecast() || false; renderView(); }
+  else if (act === "fc-apply") applyFc();
+  else if (act === "conn-search") connSearch();
+  else if (act === "conn-fetch") connFetch();
+  else if (act === "conn-use" || act === "conn-peer") { const r = conn.results[+a.dataset.i]; if (!r) return;
+    if (act === "conn-use") { document.getElementById("conn-t").value = r.ticker; if (r.exchange && r.exchange !== D.meta.exchange) { D.meta.exchange = r.exchange; } toast(`${r.ticker} selected. Click “Fetch data and recalculate”.`); }
+    else { const el = document.getElementById("conn-peers"); const set = new Set(el.value.split(/\s+/).filter(Boolean)); set.add(r.ticker); el.value = [...set].join(" "); toast(`${r.ticker} added to the peer list.`); } }
+  else if (act === "rollforward") rollForward();
+  else if (act === "selftest") runSelfTest();
+  else if (act === "newco") { if (a.dataset.confirm !== "1") { a.dataset.confirm = "1"; a.textContent = "Click again: clears all company data"; setTimeout(() => { a.dataset.confirm = ""; a.textContent = "Start a new company (blank dataset)"; }, 4000); return; }
+    D = blankDataset(); logUpdate("all","new company","blank dataset"); recalc(); location.hash = "inputs"; toast("Blank dataset started. Fill the highlighted inputs; the model calculates as soon as the required fields are complete."); }
+  else if (act === "example") { D = clone(DEFAULT_DATA); logUpdate("all","load example","PT Blue Bird Tbk"); recalc(); toast("Example dataset loaded: PT Blue Bird Tbk."); }
+  else if (act === "reset") { if (a.dataset.confirm !== "1") { a.dataset.confirm = "1"; a.textContent = "Click again to reset"; setTimeout(() => { a.dataset.confirm = ""; a.textContent = "Reset to original dataset"; }, 4000); return; }
+    D = clone(DEFAULT_DATA); clearDraft(); recalc(); toast("Original dataset restored."); }
+  else if (act.startsWith("dl-")) exportFile(act.slice(3));
+});
+document.addEventListener("mouseover", e => { const t = e.target.closest && e.target.closest("[data-tip]"); if (t) tipOn(e, esc(t.dataset.tip)); });
+document.addEventListener("mousemove", e => { const t = e.target.closest && e.target.closest("[data-tip]"); if (t) tipOn(e, esc(t.dataset.tip)); else tipOff(); });
+document.addEventListener("input", e => { if (e.target.id === "co-search") { const q = e.target.value.trim(); const a = document.getElementById("co-search-y");
+  if (a) a.href = q ? `https://finance.yahoo.com/lookup/?s=${encodeURIComponent(q)}` : "https://finance.yahoo.com/lookup/"; } });
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "conn-q") { e.preventDefault(); connSearch(); } });
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "co-search") { document.getElementById("co-search-y")?.click(); return; } });
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.classList && e.target.classList.contains("cell")) e.target.blur(); });
+window.addEventListener("hashchange", route);
+
+function rollForward(){
+  const f = D.financials, last = f.years[f.years.length-1], next = String((parseInt(last,10)||0)+1);
+  for (const k of Object.keys(f)) { if (Array.isArray(f[k]) && k !== "years") { f[k].shift(); f[k].push(null); } }
+  f.years.shift(); f.years.push(next); touch("financials"); logUpdate("financials","roll forward",`now ${f.years.join(", ")}`);
+  recalc(); toast(`Rolled forward to ${f.years.join(", ")}. Fill in FY${next}; the recommendation pauses until required cells are complete.`);
+}
+
+/* ---------------- self-test ---------------- */
+let selfTestResult = null;
+function runSelfTest(){
+  const res = BirdEngine.valuate(clone(DEFAULT_DATA)); let pass = 0; const rows = [];
+  for (const [path, ref] of PY_REFERENCE) { const v = getPath(res, path); const ok = typeof ref === "number" ? (isNum(v) && Math.abs(v-ref) <= Math.max(1e-9, Math.abs(ref)*1e-9)) : v === ref; if (ok) pass++; rows.push([path, v, ref, ok]); }
+  selfTestResult = {pass, n: PY_REFERENCE.length, rows, at: nowISO()};
+  if (view !== "checks") location.hash = "checks"; else showSelfTest();
+}
+function showSelfTest(){
+  const s = selfTestResult, el = document.getElementById("selftest-out"); if (!el) return;
+  const fmt = v => typeof v === "number" ? (Math.abs(v) < 10 ? v.toFixed(6) : v.toLocaleString("en-US",{maximumFractionDigits:3})) : esc(v);
+  el.innerHTML = `<p><span class="status ${s.pass===s.n?"ok":"err"}">${s.pass===s.n?ICON.ok:ICON.err}${s.pass} of ${s.n} outputs match the Python reference</span> <span class="muted small">· run ${fmtTS(s.at)}</span></p>
+    <div class="tbl-wrap" style="margin-top:8px;max-height:300px;overflow:auto"><table><thead><tr><th>Output</th><th class="n">JavaScript</th><th class="n">Python</th><th></th></tr></thead><tbody>${s.rows.map(([p,v,r,ok]) => `<tr><td class="mono small">${esc(p)}</td><td class="n">${fmt(v)}</td><td class="n">${fmt(r)}</td><td>${ok?`<span class="status ok">${ICON.ok}</span>`:`<span class="status err">${ICON.err}</span>`}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+/* ---------------- file save ---------------- */
+async function saveFile(filename, data){
+  const out = document.getElementById("dl-out");
+  if (window.claude && typeof window.claude.use === "function") {
+    let dl = null; try { dl = await window.claude.use("downloads"); } catch(e) { dl = null; }
+    if (!dl) { if (out) out.innerHTML = `<span class="status warn">${ICON.warn}Downloads are not available in this view. Open the platform in claude.ai or use the offline HTML file.</span>`; return; }
+    try { await dl.save({filename, data}); if (out) out.innerHTML = `<span class="status ok">${ICON.ok}Saved ${esc(filename)}</span>`; }
+    catch(e) { if (out) out.innerHTML = e && e.code === "declined" ? `<span class="muted">Save cancelled.</span>` : `<span class="status warn">${ICON.warn}Could not save (${esc(e && e.code || "error")}).</span>`; }
+    return;
+  }
+  const blob = data instanceof Blob ? data : new Blob([data]); const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+  if (out) out.innerHTML = `<span class="status ok">${ICON.ok}Downloaded ${esc(filename)}</span>`;
+}
+const stamp = () => (D.meta.valuationDate || "date").replace(/-/g,"");
+
+function summaryRows(){
+  const r = R.rec, m = D.market, S = R.selector, M = R.relative.methods;
+  return [["Company", D.meta.company], ["Ticker", D.meta.exchange+": "+D.meta.ticker], ["Valuation date", D.meta.valuationDate], ["Price date", m.priceDate],
+    ["Market price ("+CUR()+")", m.price], ["Recommendation", r.final], ["Conviction", r.conviction], ["Criteria met (of 4)", r.criteriaMet],
+    ["Central estimate ("+CUR()+")", +r.central.toFixed(2)], ["Fair-value range low ("+CUR()+")", +r.low.toFixed(2)], ["Fair-value range high ("+CUR()+")", +r.high.toFixed(2)],
+    ["Probability-weighted value ("+CUR()+")", +r.probWeighted.toFixed(2)], ["Implied upside", +r.upside.toFixed(4)],
+    ["DCF value base ("+CUR()+")", +R.dcf.base.vps.toFixed(2)], ["DCF bear ("+CUR()+")", +R.dcf.bear.vps.toFixed(2)], ["DCF bull ("+CUR()+")", +R.dcf.bull.vps.toFixed(2)],
+    ["Relative value ("+CUR()+")", +R.relative.value.toFixed(2)], ["P/E implied ("+CUR()+")", +M.pe.value.toFixed(2)], ["P/BV implied ("+CUR()+")", +M.pbv.value.toFixed(2)], ["EV/EBITDA implied ("+CUR()+")", isNum(M.eve.value)?+M.eve.value.toFixed(2):""],
+    ["Weight DCF", +S.wDCF.toFixed(4)], ["Weight relative", +S.wREL.toFixed(4)], ["Primary approach", S.primary], ["WACC base", +R.dcf.base.wacc.toFixed(5)],
+    ["Implied EBITDA margin", +R.reverse.impliedMargin.toFixed(4)], ["Implied WACC", +R.reverse.impliedWacc.toFixed(4)], ["Validation errors", r.errors], ["Validation warnings", r.warnings],
+    ["Calculated at", calcAt], ["Data last updated – market", D.meta.lastUpdated.market], ["Data last updated – financials", D.meta.lastUpdated.financials], ["Data last updated – peers", D.meta.lastUpdated.peers], ["Data last updated – assumptions", D.meta.lastUpdated.assumptions], ["Engine", "Equity Valuation Platform "+APP_VERSION]];
+}
+function needResults(){ if (!R) { const out = document.getElementById("dl-out"); if (out) out.innerHTML = `<span class="status err">${ICON.err}No results to export: fix the missing inputs first.</span>`; return false; } return true; }
+
+function templateBook(){
+  const XL = window.XLSX, wb = XL.utils.book_new(), f = D.financials, A = D.assumptions;
+  const mkt = [["key","value","unit","source"], ["company", D.meta.company, "text", ""], ["ticker", D.meta.ticker, "text", ""], ["exchange", D.meta.exchange, "text", ""], ["currency", D.meta.currency, "code", ""],
+    ["valuationDate", D.meta.valuationDate, "YYYY-MM-DD", ""], ["priceDate", D.market.priceDate, "YYYY-MM-DD", ""]].concat(
+    ["price","sharesMn","rf","erp","betaU","betaReg","tax","kdSpread"].map(k => [k, D.market[k], {price:CUR()+"/share",sharesMn:"million",betaU:"x",betaReg:"x"}[k] || "decimal (0.07 = 7%)", (D.marketSources||{})[k] || ""]));
+  XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet(mkt), "Market");
+  XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet([["key","value"]].concat(Object.entries(D.profile))), "Profile");
+  const fin = [["item"].concat(f.years)].concat(FIN_ROWS.flatMap(g => g[1].map(([k]) => [k].concat(f[k].map(v => v ?? "")))));
+  XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet(fin), "Financials");
+  const pc = PEER_COLS.map(c => c[0]); XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet([pc].concat(D.peers.map(p => pc.map(k => p[k] ?? "")))), "Peers");
+  const sc = [["scenario","driver"].concat(A.forecastYears)];
+  for (const s of ["bear","base","bull"]) { for (const [k] of DRV) sc.push([s,k].concat(A.scenarios[s][k])); for (const k of ["probability","gTerminal","waccAdj"]) sc.push([s,k,A.scenarios[s][k]]); }
+  XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet(sc), "Scenarios");
+  XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet([["key","value"]].concat(["ronicPremium","buy","sell","agreeHigh","agreeLow","reverseTol","capexHeavy","maxG","staleDays"].map(k => [k, A[k]]))), "Rules");
+  XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet([["Equity Valuation Platform – data template"],["Edit values, keep sheet names, keys and column headers. Rates as decimals (0.072 = 7.2%). Money in million of the dataset currency."],["Exported", nowISO()]]), "ReadMe");
+  return wb;
+}
+function resultsBook(){
+  const XL = window.XLSX, wb = XL.utils.book_new(), A = D.assumptions;
+  XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet([["Item","Value"]].concat(summaryRows())), "Summary");
+  const M = R.relative.methods;
+  XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet([["Method","Peers","Min","Median","Max","Value per share","Weight in relative"]].concat(Object.entries(M).map(([k,v]) => [k, v.n, v.min, v.median, v.max, v.value, v.weight]))), "Relative");
+  const dc = [["Scenario","Year","Revenue","EBITDA","EBIT","NOPAT","Reinvestment","FCFF","Discount factor","PV FCFF"]];
+  for (const s of ["bear","base","bull"]) R.dcf[s].rev.forEach((_,i) => dc.push([s, A.forecastYears[i], R.dcf[s].rev[i], R.dcf[s].ebitda[i], R.dcf[s].ebit[i], R.dcf[s].nopat[i], R.dcf[s].reinv[i], R.dcf[s].fcff[i], R.dcf[s].df[i], R.dcf[s].pv[i]]));
+  dc.push([]); dc.push(["Scenario","WACC","g","TV","PV TV","Sum PV","EV","Equity","Value/share","TV share"]);
+  for (const s of ["bear","base","bull"]) { const d = R.dcf[s]; dc.push([s,d.wacc,d.g,d.tv,d.pvTV,d.sumPV,d.ev,d.equity,d.vps,d.tvShare]); }
+  XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet(dc), "DCF");
+  XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet([["Factor","Name","DCF points","DCF max","Multiples points","Multiples max","Evidence","Rule"]].concat(R.selector.factors.map(f => [f.id,f.name,f.dcf,f.dmax,f.rel,f.rmax,f.evidence,f.rule]))), "Method selector");
+  XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet([["ID","Check","Severity","Pass","Detail"]].concat(R.checks.map(c => [c.id,c.name,c.severity,c.ok?"PASS":"FAIL",c.detail]))), "Checks");
+  XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet([["WACC \\ g"].concat(R.sens.gs)].concat(R.sens.waccs.map((w,i) => [w].concat(R.sens.grid[i])))
+    .concat([[],["Driver","Low value","High value","Low label","High label"]]).concat(R.sens.tornado.map(t => [t.driver,t.low,t.high,t.lowLabel,t.highLabel]))), "Sensitivity");
+  const tb = templateBook(); ["Market","Financials","Peers","Scenarios"].forEach(n => XL.utils.book_append_sheet(wb, tb.Sheets[n], "Input " + n));
+  return wb;
+}
+function htmlReport(){
+  const r = R.rec, m = D.market, S = R.selector;
+  const rows = summaryRows().map(([k,v]) => `<tr><td>${esc(k)}</td><td style="text-align:right">${esc(typeof v === "number" && Math.abs(v) < 1 && v !== 0 && !/errors|warnings|Criteria/.test(k) ? (v*100).toFixed(2)+"%" : (typeof v === "number" ? v.toLocaleString("en-US") : v))}</td></tr>`).join("");
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(TK())} valuation summary ${esc(D.meta.valuationDate)}</title>
+<style>body{font:14px/1.5 Arial,sans-serif;color:#14202c;background:#fff;max-width:900px;margin:24px auto;padding:0 16px}h1{font-size:22px}h2{font-size:16px;margin-top:22px}table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px solid #d6dde4;padding:5px 6px;text-align:left}.v{font-size:30px;font-weight:800}</style></head><body>
+<h1>${esc(CO())} (${esc(D.meta.exchange||"")}: ${esc(TK())}) – valuation summary</h1><p>Valuation date ${esc(D.meta.valuationDate)} · price ${CUR()} ${f0(m.price)} (${esc(m.priceDate)}) · calculated ${esc(fmtTS(calcAt))}</p>
+<p class="v">${r.final} · ${r.conviction} conviction</p><p>Central estimate ${CUR()} ${f0(r.central)} (${sp1(r.upside)}); fair-value range ${CUR()} ${f0(r.low)} – ${f0(r.high)}; ${p1(S.wDCF)} DCF / ${p1(S.wREL)} multiples (${S.primary}).</p>
+${footballField(ffRows(), m.price, r.central, {literal:true})}
+<h2>Decision criteria</h2><ul>${r.criteria.map(c => `<li>${c.ok?"✔":"✘"} ${esc(c.name)} – ${esc(c.detail)}</li>`).join("")}</ul>
+<h2>Key figures</h2><table>${rows}</table>
+<h2>Method selection</h2><table><tr><th>Factor</th><th>DCF</th><th>Multiples</th><th>Evidence</th></tr>${S.factors.map(f => `<tr><td>${f.id} ${esc(f.name)}</td><td>${f1(f.dcf)}/${f.dmax}</td><td>${f1(f.rel)}/${f.rmax}</td><td>${esc(f.evidence)}</td></tr>`).join("")}</table>
+<h2>Validation checks</h2><table>${R.checks.map(c => `<tr><td>${c.id}</td><td>${esc(c.name)}</td><td>${c.ok?"PASS":c.severity}</td><td>${esc(c.detail)}</td></tr>`).join("")}</table>
+<h2>Key risks and limitations</h2><ul>${riskList().map(x => `<li>${x}</li>`).join("")}</ul>
+<p style="color:#6f7d8b;font-size:12px">Generated by the Equity Valuation Platform ${APP_VERSION}. Sources: ${esc(sourceLine())}. Not investment advice.</p></body></html>`;
+}
+function pdfReport(){
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({unit:"pt", format:"a4"}); const r = R.rec, m = D.market, S = R.selector;
+  let y = 54; const L = 48, Wd = 500;
+  const clean = t => String(t).replace(/[\u2212\u2013\u2014]/g, "-").replace(/\u2192/g, "->").replace(/\u2265/g, ">=").replace(/\u2264/g, "<=").replace(/[^\x00-\xFF]/g, "");
+  const line = (t, size=10, bold=false, color=[20,32,44]) => { t = clean(t); doc.setFont("helvetica", bold?"bold":"normal"); doc.setFontSize(size); doc.setTextColor(...color);
+    const parts = doc.splitTextToSize(t, Wd); parts.forEach(p => { if (y > 790) { doc.addPage(); y = 54; } doc.text(p, L, y); y += size*1.35; }); };
+  const kv = (k, v) => { k = clean(k); v = clean(v); if (y > 790) { doc.addPage(); y = 54; } doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(70,85,100); doc.text(k, L, y); doc.setTextColor(20,32,44); doc.text(String(v), L+Wd, y, {align:"right"}); y += 15; };
+  line(`${CO()} (${D.meta.exchange||""}: ${TK()}) - valuation summary`, 16, true);
+  line(`Valuation date ${D.meta.valuationDate} | price ${CUR()} ${f0(m.price)} (${m.priceDate}) | calculated ${fmtTS(calcAt)}`, 9, false, [100,115,130]); y += 6;
+  const col = r.final === "BUY" ? [27,122,61] : r.final === "SELL" ? [184,53,45] : r.final === "HOLD" ? [154,99,0] : [184,53,45];
+  line(`${r.final}  -  ${r.conviction} conviction (${r.criteriaMet}/4 criteria)`, 20, true, col); y += 4;
+  kv("Central estimate (Base, blended)", `${CUR()} ${f0(r.central)}`); kv("Fair-value range (Bear - Bull, blended)", `${CUR()} ${f0(r.low)} - ${f0(r.high)}`);
+  kv("Market price", `${CUR()} ${f0(m.price)}`); kv("Implied upside / (downside)", sp1(r.upside)); kv("Probability-weighted value", `${CUR()} ${f0(r.probWeighted)}`);
+  y += 6; line("Results by method", 12, true);
+  kv("DCF (FCFF) Bear / Base / Bull", `${CUR()} ${f0(R.dcf.bear.vps)} / ${f0(R.dcf.base.vps)} / ${f0(R.dcf.bull.vps)}`);
+  kv("Relative valuation (peer multiples)", `${CUR()} ${f0(R.relative.value)}`);
+  Object.entries({pe:"P/E", pbv:"P/BV", eve:"EV/EBITDA"}).forEach(([k,l]) => kv(`   ${l} (n=${R.relative.methods[k].n}, median ${mx(R.relative.methods[k].median)})`, `${CUR()} ${f0(R.relative.methods[k].value)}`));
+  kv("Method weights (selector)", `${p1(S.wDCF)} DCF / ${p1(S.wREL)} multiples - ${S.primary}`);
+  kv("WACC (base) / implied WACC", `${p2(R.dcf.base.wacc)} / ${p2(R.reverse.impliedWacc)}`); kv("Market-implied EBITDA margin", `${p1(R.reverse.impliedMargin)} vs ${p1(R.reverse.deliveredMargin)} delivered`);
+  y += 6; line("Decision criteria", 12, true); r.criteria.forEach(c => line(`${c.ok?"[met]":"[not met]"} ${c.name}: ${c.detail}`, 9.5));
+  y += 6; line("Method selection", 12, true); S.factors.forEach(f => line(`${f.id} ${f.name}: DCF ${f1(f.dcf)}/${f.dmax}, multiples ${f1(f.rel)}/${f.rmax} - ${f.evidence}`, 9.5));
+  y += 6; line(`Validation: ${r.errors} error(s), ${r.warnings} warning(s)`, 12, true); R.checks.filter(c => !c.ok).forEach(c => line(`${c.id} ${c.severity}: ${c.name} - ${c.detail}`, 9.5));
+  y += 6; line("Key risks and limitations", 12, true); riskList().forEach(x => line("- " + x.replace(/–|−/g,"-"), 9.5));
+  y += 8; line(`Sources: ${sourceLine()}. Data last updated: market ${fmtTS(D.meta.lastUpdated.market)}, financials ${fmtTS(D.meta.lastUpdated.financials)}, peers ${fmtTS(D.meta.lastUpdated.peers)}. Generated by Equity Valuation Platform ${APP_VERSION}. Not investment advice.`, 8.5, false, [100,115,130]);
+  return doc.output("blob");
+}
+async function exportFile(kind){
+  const out = document.getElementById("dl-out");
+  try {
+    if (kind === "json") return saveFile(`${fileTK()}_dataset_${stamp()}.json`, JSON.stringify(D, null, 1));
+    if (kind === "template") { if (!window.XLSX) throw new Error("Excel library not loaded (needs internet)"); return saveFile(`${fileTK()}_data_template_${stamp()}.xlsx`, new Blob([window.XLSX.write(templateBook(), {type:"array", bookType:"xlsx"})])); }
+    if (!needResults()) return;
+    if (kind === "csv") { const q = v => `"${String(v ?? "").replace(/"/g,'""')}"`; return saveFile(`${fileTK()}_valuation_summary_${stamp()}.csv`, ["item,value"].concat(summaryRows().map(([k,v]) => q(k)+","+q(v))).join("\r\n")); }
+    if (kind === "html") return saveFile(`${fileTK()}_valuation_report_${stamp()}.html`, htmlReport());
+    if (kind === "xlsx") { if (!window.XLSX) throw new Error("Excel library not loaded (needs internet)"); return saveFile(`${fileTK()}_valuation_results_${stamp()}.xlsx`, new Blob([window.XLSX.write(resultsBook(), {type:"array", bookType:"xlsx"})])); }
+    if (kind === "pdf") { if (!window.jspdf) throw new Error("PDF library not loaded (needs internet)"); return saveFile(`${fileTK()}_valuation_summary_${stamp()}.pdf`, pdfReport()); }
+  } catch(e) { if (out) out.innerHTML = `<span class="status err">${ICON.err}${esc(e.message || e)}</span>`; }
+}
+
+/* ---------------- import ---------------- */
+function importFile(file){
+  const name = file.name.toLowerCase(), rd = new FileReader();
+  const report = (ok, msg, notes=[]) => { const out = document.getElementById("import-out"); if (out) out.innerHTML = `<div class="note ${ok?"":"bad"} small"><b>${esc(msg)}</b>${notes.length?`<ul class="plain" style="margin-top:4px">${notes.slice(0,15).map(n=>`<li>${esc(n)}</li>`).join("")}</ul>`:""}</div>`; };
+  rd.onerror = () => report(false, "The file could not be read.");
+  rd.onload = () => {
+    try {
+      const before = JSON.stringify(D); let notes = [], n = 0;
+      if (name.endsWith(".json")) { const d = JSON.parse(rd.result); for (const k of ["meta","market","financials","peers","assumptions","profile"]) if (!d[k]) throw new Error(`missing section “${k}”`);
+        D = d; D.meta.lastUpdated = D.meta.lastUpdated || {}; notes.push("Complete dataset replaced."); n = 1; logUpdate("all","import JSON",file.name); }
+      else if (name.endsWith(".csv")) { n = importCSV(rd.result, notes); logUpdate("import","import CSV",`${file.name}: ${n} values`); }
+      else if (name.endsWith(".xlsx")) { if (!window.XLSX) throw new Error("Excel library not loaded (needs internet)"); n = importBook(window.XLSX.read(new Uint8Array(rd.result), {type:"array"}), notes); logUpdate("import","import XLSX",`${file.name}: ${n} values`); }
+      else throw new Error("unsupported file type");
+      if (JSON.stringify(D) === before && n) notes.push("No values changed (file matches the current data).");
+      recalc(); report(true, `Imported ${file.name}: ${n} value(s) read. ${missing.length ? missing.length+" required input(s) still missing." : "All required inputs present."}`, notes);
+    } catch(e) { report(false, `Import failed: ${e.message}. Nothing was changed.`); }
+  };
+  if (name.endsWith(".xlsx")) rd.readAsArrayBuffer(file); else rd.readAsText(file);
+}
+const numOrNull = (v, notes, where) => { if (v === "" || v == null) return null; const x = typeof v === "number" ? v : parseFloat(String(v).replace(/[\s,]/g,"")); if (!Number.isFinite(x)) { notes.push(`${where}: “${v}” is not a number – ignored`); return undefined; } return x; };
+function applyKV(rows, target, keys, notes, sec, numKeys){
+  let n = 0; for (const [k, v] of rows) { if (!keys.includes(k)) { if (k) notes.push(`Unknown key “${k}” ignored`); continue; }
+    if (numKeys && !numKeys.includes(k)) { target[k] = typeof v === "string" ? v.trim() : v; n++; continue; }
+    const x = numOrNull(v, notes, k); if (x === undefined) continue;
+    if (["rf","erp","tax","kdSpread","buy","sell","agreeHigh","agreeLow","reverseTol","capexHeavy","maxG","ronicPremium"].includes(k) && isNum(x) && Math.abs(x) > 1) notes.push(`${k} = ${x} looks like a percent; rates must be decimals (0.07 = 7%). Value not imported.`);
+    else { target[k] = x; n++; } }
+  if (n) touch(sec); return n;
+}
+function importBook(wb, notes){
+  const XL = window.XLSX, sh = n => wb.Sheets[n] ? XL.utils.sheet_to_json(wb.Sheets[n], {header:1, raw:true, defval:""}) : null; let n = 0;
+  const mk = sh("Market"); if (mk) { const rows = mk.slice(1).map(r => [String(r[0]).trim(), r[1]]);
+    const vd = rows.find(r => r[0]==="valuationDate"), pd = rows.find(r => r[0]==="priceDate");
+    if (vd) { D.meta.valuationDate = xlDate(vd[1]); n++; } if (pd) { D.market.priceDate = xlDate(pd[1]); n++; }
+    n += importMeta(rows);
+    n += applyKV(rows.filter(r => !["valuationDate","priceDate","company","ticker","exchange","currency"].includes(r[0])), D.market, ["price","sharesMn","rf","erp","betaU","betaReg","tax","kdSpread"], notes, "market"); }
+  const pf = sh("Profile"); if (pf) { pf.slice(1).forEach(([k,v]) => { if (k in D.profile) { D.profile[k] = typeof D.profile[k] === "boolean" ? (v === true || String(v).toLowerCase() === "true" || v === 1) : v; n++; } }); }
+  const fi = sh("Financials"); if (fi) n += importFinRows(fi, notes);
+  const pe = sh("Peers"); if (pe) n += importPeerRows(pe, notes);
+  const sc = sh("Scenarios"); if (sc) { sc.slice(1).forEach(r => { const [s, k, ...vals] = r; const S = D.assumptions.scenarios[s]; if (!S) return;
+      if (DRV.some(d => d[0] === k)) { vals.slice(0, S[k].length).forEach((v,i) => { const x = numOrNull(v, notes, `${s} ${k}`); if (isNum(x)) { S[k][i] = x; n++; } }); }
+      else if (["probability","gTerminal","waccAdj"].includes(k)) { const x = numOrNull(vals[0], notes, `${s} ${k}`); if (isNum(x)) { S[k] = x; n++; } } });
+    touch("assumptions"); }
+  const ru = sh("Rules"); if (ru) n += applyKV(ru.slice(1).map(r => [String(r[0]).trim(), r[1]]), D.assumptions, ["ronicPremium","buy","sell","agreeHigh","agreeLow","reverseTol","capexHeavy","maxG","staleDays"], notes, "assumptions");
+  if (!n) notes.push("No recognised sheets (Market, Profile, Financials, Peers, Scenarios, Rules).");
+  return n;
+}
+function importMeta(rows){ let n = 0; for (const [k, v] of rows) if (["company","ticker","exchange","currency"].includes(k) && String(v ?? "").trim()) { D.meta[k] = String(v).trim(); n++; } return n; }
+function xlDate(v){ if (typeof v === "number") { const d = new Date(Math.round((v - 25569) * 86400000)); return d.toISOString().slice(0,10); } return String(v).trim().slice(0,10); }
+function importFinRows(rows, notes){
+  const hdr = rows[0].slice(1).map(String).filter(Boolean), f = D.financials; let n = 0;
+  if (hdr.length !== f.years.length) notes.push(`File has ${hdr.length} year columns; the model uses ${f.years.length}. Extra columns ignored.`);
+  hdr.slice(0, f.years.length).forEach((y,i) => { if (y !== f.years[i]) { f.years[i] = y; } });
+  rows.slice(1).forEach(r => { const k = String(r[0]).trim(); if (!k) return; if (!Array.isArray(f[k]) || k === "years") { notes.push(`Unknown financial item “${k}” ignored`); return; }
+    for (let i = 0; i < f.years.length; i++) { const x = numOrNull(r[i+1], notes, `${k} ${f.years[i]}`); if (x !== undefined) { f[k][i] = x; n++; } } });
+  if (n) touch("financials"); return n;
+}
+function importPeerRows(rows, notes){
+  const hdr = rows[0].map(h => String(h).trim()); if (!hdr.includes("ticker")) { notes.push("Peer table needs a “ticker” column"); return 0; }
+  const peers = []; let n = 0;
+  rows.slice(1).forEach(r => { if (!String(r[hdr.indexOf("ticker")]).trim()) return; const p = {};
+    PEER_COLS.forEach(([k,,kind]) => { const j = hdr.indexOf(k); const v = j >= 0 ? r[j] : "";
+      if (kind === "bool") p[k] = v === true || String(v).toLowerCase() === "true" || v === 1;
+      else if (kind === "text") p[k] = String(v).trim(); else if (kind === "date") p[k] = v === "" ? D.meta.valuationDate : xlDate(v);
+      else { const x = numOrNull(v, notes, `${r[hdr.indexOf("ticker")]} ${k}`); p[k] = x === undefined ? null : x; } n++; });
+    peers.push(p); });
+  if (peers.length) { D.peers = peers; touch("peers"); notes.push(`${peers.length} peers loaded (previous peer list replaced).`); }
+  return n;
+}
+function parseCSV(text){ const rows = []; let row = [], cur = "", q = false;
+  for (let i = 0; i < text.length; i++) { const c = text[i];
+    if (q) { if (c === '"') { if (text[i+1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true; else if (c === "," || c === ";") { row.push(cur); cur = ""; } else if (c === "\n" || c === "\r") { if (c === "\r" && text[i+1] === "\n") i++; row.push(cur); rows.push(row); row = []; cur = ""; } else cur += c; }
+  if (cur !== "" || row.length) { row.push(cur); rows.push(row); } return rows.filter(r => r.some(x => String(x).trim() !== "")); }
+function importCSV(text, notes){
+  const rows = parseCSV(text); if (!rows.length) throw new Error("empty file"); const h = rows[0].map(x => x.trim().toLowerCase());
+  if (h[0] === "key") { const kv = rows.slice(1).map(r => [r[0].trim(), r[1]]); let n = 0;
+    const vd = kv.find(r => r[0]==="valuationDate"), pd = kv.find(r => r[0]==="priceDate"); if (vd) { D.meta.valuationDate = vd[1].trim(); n++; } if (pd) { D.market.priceDate = pd[1].trim(); n++; }
+    n += importMeta(kv);
+    return n + applyKV(kv.filter(r => !["valuationDate","priceDate","company","ticker","exchange","currency"].includes(r[0])), D.market, ["price","sharesMn","rf","erp","betaU","betaReg","tax","kdSpread"], notes, "market"); }
+  if (h[0] === "item") return importFinRows(rows, notes);
+  if (h.includes("ticker")) return importPeerRows([rows[0].map(x => x.trim())].concat(rows.slice(1)), notes);
+  throw new Error("unrecognised CSV layout (first header must be key, item or contain ticker)");
+}
+
+function blankDataset(){
+  const d = clone(DEFAULT_DATA), now = nowISO(), today = now.slice(0, 10), nul = n => Array(n).fill(null);
+  d.meta = Object.assign(d.meta, {company:"New company", ticker:"TICKER", exchange:"", currency:"IDR", valuationDate:today, updateLog:[],
+    lastUpdated:{market:now, financials:now, peers:now, assumptions:now}});
+  d.profile = {industry:"", businessModel:"", isFinancial:false, auditedFS:true, guidance:false};
+  for (const k of Object.keys(d.market)) d.market[k] = null;
+  d.market.priceDate = today;
+  d.marketSources = {}; d.assumptionSources = {};
+  const n = d.financials.years.length, y0 = new Date().getFullYear() - 1;
+  d.financials.years = Array.from({length:n}, (_, i) => String(y0 - n + 1 + i));
+  for (const k of Object.keys(d.financials)) if (Array.isArray(d.financials[k]) && k !== "years") d.financials[k] = nul(n);
+  d.financials.source = "";
+  d.peers = [{ticker:"PEER1",name:"",price:null,priceDate:today,sharesMn:null,eps:null,bvps:null,revGrowth:null,niGrowth:null,debt:null,cash:null,evEbitda:null,audited:true,closeModel:true,source:""}];
+  d.assumptions.forecastYears = Array.from({length:5}, (_, i) => String(y0 + 1 + i));
+  for (const s of Object.values(d.assumptions.scenarios)) { s.growth = nul(5); s.ebitdaMargin = nul(5); s.daPct = nul(5); s.s2c = nul(5); }
+  return d;
+}
+
+/* ---------------- boot ---------------- */
+(function boot(){
+  const draft = loadDraft();
+  if (draft && draft.data && draft.data.meta) { D = draft.data; setTimeout(() => toast(`Restored your saved draft from ${fmtTS(draft.savedAt)}. Import & export → Reset restores the original data.`), 400); }
+  const h = (location.hash || "").slice(1); view = V[h] ? h : "dashboard";
+  recalc();
+})();
+</script>
+
+</body></html>
