@@ -52,6 +52,106 @@ def idx_api():
             STATE["idx"]["api_obj"] = STATE["idx"]["api"]()
         return STATE["idx"]["api_obj"]
 
+def _pick(d, *names):
+    low = {str(k).lower().replace("_", ""): v for k, v in d.items()}
+    for n in names:
+        v = low.get(n.lower().replace("_", ""))
+        if v not in (None, ""): return str(v).strip()
+    return ""
+
+def idx_companies():
+    """All IDX-listed shares with sector/industry where IDX provides them (cached 12 h)."""
+    c = STATE.get("companies")
+    if c and (dt.datetime.now() - c["at"]).total_seconds() < 43200: return c
+    api = idx_api()
+    if not api: raise RuntimeError(f"IDX package not available ({STATE['idx_error']})")
+    rows, src = [], ""
+    try:   # company profiles carry sector and industry
+        r = api.client.get("/primary/ListedCompany/GetCompanyProfiles", params={"emitenType": "s", "start": 0, "length": 9999})
+        j = r.json(); data = j.get("data") if isinstance(j, dict) else j
+        for d in data or []:
+            t = _pick(d, "KodeEmiten", "Kode_Emiten", "Code")
+            if t: rows.append({"ticker": t, "name": _pick(d, "NamaEmiten", "Nama_Emiten", "Name"), "sector": _pick(d, "Sektor", "Sector"),
+                               "industry": _pick(d, "Industri", "SubSektor", "Sub_Sektor", "Industry", "SubIndustri"), "board": _pick(d, "PapanPencatatan", "Papan_Pencatatan", "ListingBoard"),
+                               "listed": _pick(d, "TanggalPencatatan", "Tanggal_Pencatatan", "ListingDate")[:10]})
+        src = "IDX listed company profiles"
+    except Exception as e:
+        sys.stderr.write(f"IDX company profiles failed: {e}\n")
+    if not rows:   # fallback: plain issuer list (code and name only)
+        rows = [{"ticker": e.get("KodeEmiten", "").strip(), "name": e.get("NamaEmiten", "").strip(), "sector": "", "industry": "", "board": "", "listed": ""}
+                for e in api.get_emitens() if e.get("KodeEmiten")]
+        src = "IDX issuer list"
+    rows.sort(key=lambda r: r["ticker"])
+    STATE["companies"] = {"at": dt.datetime.now(), "rows": rows, "source": src}
+    return STATE["companies"]
+
+def peer_candidates(ticker, cap=12):
+    """Same IDX industry first, then same sector; returns [(ticker, name, level)] (level: 'industry' or 'sector')."""
+    rows = idx_companies()["rows"]; me = next((r for r in rows if r["ticker"] == ticker.upper()), None)
+    if not me or not (me["industry"] or me["sector"]): return [], None, "no sector data for this company in the IDX list"
+    out = [(r["ticker"], r["name"], "industry") for r in rows if me["industry"] and r["industry"] == me["industry"] and r["ticker"] != me["ticker"]]
+    if len(out) < 6 and me["sector"]:
+        out += [(r["ticker"], r["name"], "sector") for r in rows if r["sector"] == me["sector"] and r["ticker"] != me["ticker"] and r["ticker"] not in {o[0] for o in out}]
+    return out[:cap], me, f"{len([o for o in out if o[2] == 'industry'])} in the same industry ({me['industry'] or '-'}), sector {me['sector'] or '-'}"
+
+def _target_metrics(P):
+    import math
+    F = P["financials"]; it = F.get("items", {}); ys = F.get("years", [])
+    last = lambda k: (it.get(k) or [None])[-1] if it.get(k) else None
+    rev = it.get("revenue") or []
+    g = (rev[-1] / rev[-2] - 1) if len(rev) >= 2 and rev[-1] and rev[-2] else None
+    eq = last("equityTotal"); debt = (last("bankLoans") or 0) + (last("leases") or 0)
+    m = P["market"]
+    return {"mcap": (m.get("price") or 0) * (m.get("sharesMn") or 0) or None, "growth": g, "de": debt / eq if eq else None,
+            "eps": last("eps"), "profitable": (last("niParent") or 0) > 0}
+
+def score_peer(t, r, level):
+    """0-100 points with the reasons shown to the user."""
+    import math
+    pts, why = 0.0, []
+    if level == "industry": pts += 40; why.append("same IDX industry (+40)")
+    else: pts += 20; why.append("same IDX sector only (+20)")
+    mc = (r.get("price") or 0) * (r.get("sharesMn") or 0)
+    if mc and t["mcap"]:
+        ratio = mc / t["mcap"]; s = 25 * max(0.0, 1 - abs(math.log(ratio)) / math.log(10)); pts += s
+        why.append(f"size {ratio:.2f}x of the company (+{s:.0f})")
+    else: why.append("size unknown (+0)")
+    if r.get("eps") is not None and r["eps"] > 0: pts += 15; why.append("profitable, P/E usable (+15)")
+    else: why.append("loss or no EPS, P/E not usable (+0)")
+    if r.get("revGrowth") is not None and t["growth"] is not None:
+        s = 10 * max(0.0, 1 - abs(r["revGrowth"] - t["growth"]) / 0.30); pts += s
+        why.append(f"revenue growth {r['revGrowth']*100:.0f}% vs {t['growth']*100:.0f}% (+{s:.0f})")
+    else: why.append("growth unknown (+0)")
+    eq = (r.get("bvps") or 0) * (r.get("sharesMn") or 0)
+    if eq > 0 and r.get("debt") is not None and t["de"] is not None:
+        de = r["debt"] / eq; s = 10 * max(0.0, 1 - abs(de - t["de"]) / 2.0); pts += s
+        why.append(f"debt/equity {de:.2f} vs {t['de']:.2f} (+{s:.0f})")
+    else: why.append("leverage unknown (+0)")
+    return round(pts, 1), why, (mc / t["mcap"] if mc and t["mcap"] else None)
+
+def select_peers(P, ticker, exchange, date, n=5):
+    cands, me, info = peer_candidates(ticker)
+    if not cands: return [], [], f"Peers could not be chosen automatically ({info}); add them by hand."
+    sfx = FY.SUFFIX.get(exchange.upper(), ""); t = _target_metrics(P); evald = []; notes = []
+    for tk, name, level in cands:
+        try:
+            r = FY.peer_row(tk + sfx, tk, date, notes)
+        except Exception as e:
+            evald.append({"ticker": tk, "name": name, "score": 0, "reasons": [f"no data ({type(e).__name__})"], "selected": False}); continue
+        if r.get("price") is None:
+            evald.append({"ticker": tk, "name": name, "score": 0, "reasons": ["no price on Yahoo"], "selected": False}); continue
+        sc, why, ratio = score_peer(t, r, level)
+        r["closeModel"] = level == "industry" and ratio is not None and 0.2 <= ratio <= 5
+        evald.append({"ticker": tk, "name": r.get("name") or name, "score": sc, "reasons": why, "selected": False, "_row": r})
+    evald.sort(key=lambda x: -x["score"])
+    chosen = [e for e in evald if e.get("_row") and e["score"] >= 40][:n]
+    for e in chosen: e["selected"] = True
+    rows = [e["_row"] for e in chosen]
+    for e in evald: e.pop("_row", None)
+    msg = (f"Peers chosen by score from {len(evald)} candidates ({info}): " + ", ".join(f"{e['ticker']} {e['score']:.0f}" for e in chosen) + "."
+           if chosen else f"No candidate reached 40 points ({info}); add peers by hand.")
+    return rows, evald, msg
+
 def idx_search(q):
     api = idx_api()
     if not api: return None
@@ -305,6 +405,8 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers(); self.wfile.write(body)
+    def do_HEAD(self):
+        self.send_response(200); self.send_header("Content-Type", "text/html"); self.end_headers()
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -326,6 +428,12 @@ class H(BaseHTTPRequestHandler):
                 return self.wfile.write(body)
             if u.path == "/health":
                 return self._send(200, {"ok": True, "version": VERSION, "yahoo": True, "idx": bool(STATE["idx"]), "idxError": STATE["idx_error"]})
+            if u.path == "/companies":
+                try:
+                    c = idx_companies()
+                    return self._send(200, {"source": c["source"], "retrieved": c["at"].strftime("%Y-%m-%d %H:%M"), "companies": c["rows"]})
+                except Exception as e:
+                    return self._send(502, {"error": f"IDX company list not available ({type(e).__name__}: {e})"})
             if u.path == "/search":
                 text = q.get("q", "").strip()
                 if len(text) < 2: return self._send(200, {"results": []})
@@ -344,8 +452,14 @@ class H(BaseHTTPRequestHandler):
                 peers = [p for p in q.get("peers", "").replace(",", " ").split() if p]
                 date = q.get("date") or str(dt.date.today())
                 if len(peers) > 12: return self._send(400, {"error": "at most 12 peers per request"})
+                auto = peers == ["auto"]
+                if auto: peers = []
                 with FETCH_LOCK:
                     P = fetch(t, q.get("exchange", "IDX"), peers, date, q.get("fin", "yahoo"))
+                    if auto:
+                        try: rows, sel, msg = select_peers(P, t, q.get("exchange", "IDX"), date)
+                        except Exception as e: rows, sel, msg = [], [], f"Peers could not be chosen automatically ({type(e).__name__}: {e})."
+                        P["peers"] = rows; P["peerSelection"] = sel; P["autoPeers"] = [r["ticker"] for r in rows]; P["notes"].insert(0, msg)
                 return self._send(200, P)
             return self._send(404, {"error": "unknown path"})
         except Exception as e:

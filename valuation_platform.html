@@ -536,9 +536,11 @@ function connPanel(){
     : conn.state === "off" ? `<span class="pill warn">Not connected</span> <span class="small muted">Start <code>python3 data_connector.py</code> on this computer and open the offline file <code>valuation_platform.html</code>; the online link cannot reach your computer.</span>`
     : `<span class="pill">Not checked</span>`;
   const peers = D.peers.map(p => p.ticker).filter(Boolean).join(" ");
+  if (conn.state === "on" && isIDX() && !conn.companies && !conn.compLoading && !conn.compErr) setTimeout(connLoadCompanies, 0);
   const res = conn.results.length ? `<div class="tbl-wrap" style="margin-top:8px;max-height:260px;overflow:auto"><table class="tbl"><thead><tr><th>Ticker</th><th>Company</th><th>Exchange</th><th></th></tr></thead><tbody>${conn.results.map((r,i) => `<tr><td><b>${esc(r.ticker)}</b></td><td>${esc(r.name)}</td><td>${esc(r.exchange||"")}</td><td style="white-space:nowrap"><button class="ghost" data-act="conn-use" data-i="${i}">Value this company</button> <button class="ghost" data-act="conn-peer" data-i="${i}">Add as peer</button></td></tr>`).join("")}</tbody></table></div>` : "";
   return `<div class="panel" id="conn-panel"><h3>Fetch data automatically</h3>
     <div class="row" style="gap:8px">${st}<button class="ghost" data-act="conn-check">${conn.state === "unknown" ? "Check connector" : "Check again"}</button></div>
+    ${compPanel()}${conn.companies ? `<div class="eyebrow" style="margin-top:14px">Or enter tickers yourself</div>` : ""}
     <div class="form-grid" style="margin-top:10px">
       <div class="field"><label>Search company <span class="unit">(name or ticker)</span></label><div class="row" style="gap:6px"><input id="conn-q" placeholder="e.g. Blue Bird, Astra, TLKM" aria-label="Search company" style="flex:1 1 160px"><button data-act="conn-search" ${conn.state !== "on" ? "disabled" : ""}>Search</button></div></div>
       <div class="field"><label>Company to value</label><input id="conn-t" value="${esc(D.meta.ticker || "")}" aria-label="Ticker to fetch"><div class="src">Exchange ${esc(D.meta.exchange || "IDX")} · valuation date ${esc(D.meta.valuationDate || "")}</div></div>
@@ -547,7 +549,7 @@ function connPanel(){
     </div>
     <div class="row" style="gap:8px;margin-top:10px"><button class="primary" data-act="conn-fetch" ${conn.state !== "on" || conn.busy ? "disabled" : ""}>${conn.busy ? "Fetching… (up to a minute)" : "Fetch data and recalculate"}</button>
       <span class="small muted">Fills Market & company, Financial history and Peer data. Cost-of-capital inputs are then suggested below (Damodaran) and the forecast on the Forecast tab; you decide what to apply.</span></div>
-    ${res}<div id="conn-out" style="margin-top:8px">${conn.out}</div>${suggPanel()}</div>`;
+    ${res}${conn.busy && conn.busyText ? `<div class="note small" style="margin-top:8px">${esc(conn.busyText)} This can take up to a minute.</div>` : ""}<div id="conn-out" style="margin-top:8px">${conn.out}</div>${suggPanel()}</div>`;
 }
 /* ---- suggested market inputs from Damodaran (delivered by the connector) ---- */
 function marketSugg(){
@@ -619,7 +621,7 @@ function fcPanel(){
     <li>Bear: growth −3pp, margin −2pp, sales-to-capital ×0.85, g −0.5pp, WACC +0.5pp. Bull: growth +2pp, margin +1.5pp, sales-to-capital ×1.2, g +0.5pp (below Rf − 1pp), WACC −0.5pp. Probabilities unchanged.</li></ul>
     <div class="row" style="gap:8px;margin-top:6px"><button class="primary" data-act="fc-apply">Apply suggestion to all scenarios</button><span class="small muted">Overwrites the current forecast drivers; the change is logged.</span></div></div>`;
 }
-function applyFc(){
+function applyFc(silent){
   const S = fcSugg; if (!S) return; const A = D.assumptions, b = S.basis, today = nowISO().slice(0,10);
   ["bear","base","bull"].forEach(s => Object.assign(A.scenarios[s], {growth:S[s].growth, ebitdaMargin:S[s].ebitdaMargin, daPct:S[s].daPct, s2c:S[s].s2c, gTerminal:S[s].gTerminal, waccAdj:S[s].waccAdj}));
   D.assumptionSources = Object.assign(D.assumptionSources || {}, {
@@ -628,7 +630,14 @@ function applyFc(){
     daPct:`Suggested from history (${today}): D&A FY${b.years} = ${p1(b.daPct)} of revenue.`, s2c:`Suggested from history (${today}): ${b.s2cHow}; Bear ×0.85, Bull ×1.2.`,
     gTerminal:`Suggested: min(max. terminal growth, Rf − 2pp) = ${p1(b.gT)}; Bear −0.5pp, Bull +0.5pp.`, waccAdj:"Scenario risk overlay on WACC: Bear +0.5pp, Bull −0.5pp.",
     consensus:"Forecast drivers suggested from the financial history; not yet checked against analyst consensus or company guidance."});
-  touch("assumptions"); logUpdate("assumptions", "suggestion", "forecast drivers suggested from history applied"); fcSugg = null; recalc(); toast("Forecast suggestion applied to Bear, Base and Bull.");
+  touch("assumptions"); logUpdate("assumptions", "suggestion", "forecast drivers suggested from history applied"); fcSugg = null; if (silent) return; recalc(); toast("Forecast suggestion applied to Bear, Base and Bull.");
+}
+function peerSelPanel(){
+  const S = D.peerSelection; if (!S || !(S.items || []).length) return "";
+  return `<div class="panel"><div class="panel-head"><h3>Why these peers</h3><span class="src">${esc(S.note || "")}</span></div>
+    <p class="small muted">Each candidate from the same IDX industry (or sector) is scored: business model – same industry 40 / same sector 20; size – market value close to the company's, up to 25; profitability – positive EPS so P/E is usable, 15; revenue growth close, up to 10; debt/equity close, up to 10. The five best with at least 40 points become peers; “close model” is set for same-industry peers within 0.2x–5x the company's size.</p>
+    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>Ticker</th><th>Company</th><th class="n">Score</th><th>Peer</th><th>Reasons</th></tr></thead><tbody>
+    ${S.items.map((e,i) => `<tr><td>${i+1}</td><td><b>${esc(e.ticker)}</b></td><td>${esc(e.name || "")}</td><td class="n">${f1(e.score)}</td><td>${e.selected ? "✓ selected" : '<span class="muted">–</span>'}</td><td class="small muted">${esc((e.reasons || []).join("; "))}</td></tr>`).join("")}</tbody></table></div></div>`;
 }
 function applyPayload(P){
   const notes = [], newCo = String(P.meta.ticker || "").toUpperCase() !== String(D.meta.ticker || "").toUpperCase();
@@ -652,25 +661,69 @@ function applyPayload(P){
     importPeerRows(rows, notes);
   }
   if (P.profile && typeof P.profile.isFinancial === "boolean") D.profile.isFinancial = P.profile.isFinancial;
+  if (P.peerSelection) D.peerSelection = {date: nowISO().slice(0,10), note: (P.notes || [])[0] || "", items: P.peerSelection};
+  else if ((P.peers || []).length) delete D.peerSelection;
   logUpdate("all", "fetch", `${D.meta.ticker}: market and peers from Yahoo, statements from ${(P.connector && P.connector.financialSource) || "Yahoo"}`);
   recalc({render:false});
   return notes.concat(P.notes || []);
 }
-async function connFetch(){
-  const t = (document.getElementById("conn-t").value || "").trim().toUpperCase(); if (!t) { toast("Enter a ticker first."); return; }
-  const peers = (document.getElementById("conn-peers").value || "").trim(), fin = document.getElementById("conn-fin").value;
-  conn.busy = true; conn.out = ""; connRender();
+async function connFetch(opts){
+  opts = opts || {};
+  const t = (opts.ticker || document.getElementById("conn-t").value || "").trim().toUpperCase(); if (!t) { toast("Enter a ticker first."); return; }
+  const peers = opts.peers || (document.getElementById("conn-peers").value || "").trim(), fin = (document.getElementById("conn-fin") || {}).value || (isIDX() ? "idx" : "yahoo");
+  const newCo = t !== String(D.meta.ticker || "").toUpperCase(), auto = !!opts.auto && newCo;
+  conn.busy = true; conn.out = ""; conn.busyText = opts.ticker ? `Fetching ${t}${peers === "auto" ? " and its peers" : ""} from IDX, Yahoo and Damodaran…` : ""; connRender();
   try {
-    const P = await connGet(`/fetch?ticker=${encodeURIComponent(t)}&exchange=${encodeURIComponent(D.meta.exchange || "IDX")}&peers=${encodeURIComponent(peers)}&date=${encodeURIComponent(D.meta.valuationDate || "")}&fin=${fin}`, 180000);
-    const notes = applyPayload(P); conn.dm = P.damodaran || null; conn.ind = null;
+    const P = await connGet(`/fetch?ticker=${encodeURIComponent(t)}&exchange=${encodeURIComponent(D.meta.exchange || "IDX")}&peers=${encodeURIComponent(peers)}&date=${encodeURIComponent(D.meta.valuationDate || "")}&fin=${fin}`, 240000);
+    let notes = applyPayload(P); conn.dm = P.damodaran || null; conn.ind = null;
+    if (auto) notes = notes.filter(n => !n.startsWith("Cost-of-capital inputs:") && !n.startsWith("Effective tax rate last fiscal year"));
+    if (P.autoPeers && P.autoPeers.length) conn.peersText = P.autoPeers.join(" ");
+    const done = [];
+    if (auto) {
+      const sg = marketSugg(); sg.forEach(r => { D.market[r.k] = r.v; D.marketSources[r.k] = r.src; done.push(`${r.label} ${r.fmt(r.v)}`); });
+      if (sg.length) { touch("market"); logUpdate("market", "auto", "suggested cost-of-capital inputs applied for new company " + t); }
+      fcSugg = suggestForecast();
+      if (fcSugg) { applyFc(true); done.push("forecast drivers from history"); } else notes.push("Forecast could not be derived from the history – fill Forecast & scenarios by hand.");
+      recalc({render:false});
+    }
     const lines = Object.entries((P.financials || {}).lineSource || {}).map(([k,v]) => `${FIN_LABEL[k] || k}: ${v}`);
-    conn.out = `<div class="note small"><b>Fetched ${esc(D.meta.company)} (${esc(TK())}) – statements from ${esc((P.connector||{}).financialSource || "Yahoo")}, ${P.peers.length} peers. ${R ? "Model recalculated." : "Some inputs are still missing (see the highlighted fields)."}</b>
+    const res = R ? `Central value ${CUR()} ${f0(R.rec.central)} vs. price ${f0(D.market.price)} → <b>${esc(R.rec.signal)}</b> (${esc(R.rec.conviction)} conviction).` : "Some inputs are still missing (see the highlighted fields).";
+    conn.out = `<div class="note small"><b>${esc(D.meta.company)} (${esc(TK())}) – statements from ${esc((P.connector||{}).financialSource || "Yahoo")}, ${P.peers.length} peers.</b> ${res} ${R ? '<a href="#dashboard">Open dashboard →</a>' : ""}${P.peerSelection ? ' · <a href="#peers">Why these peers →</a>' : ""}
+      ${done.length ? `<div style="margin-top:4px"><b>Derived automatically for the new company – please review:</b> ${esc(done.join(" · "))}. Risk-free rate kept (${p2(D.market.rf)}).</div>` : ""}
       <ul class="plain" style="margin-top:4px">${notes.slice(0,20).map(n => `<li>${esc(n)}</li>`).join("")}</ul>${lines.length ? `<details style="margin-top:4px"><summary>Source per line</summary><div class="small muted">${esc(lines.join(" · "))}</div></details>` : ""}</div>`;
-    toast(`Data for ${t} fetched and applied.`);
+    toast(`${t}: data fetched${auto ? ", inputs derived" : ""} and model recalculated.`);
   } catch(e) {
-    conn.out = `<div class="note bad small"><b>Fetch failed:</b> ${esc(e.name === "AbortError" ? "no answer from the connector in time" : (e.message || String(e)))}</div>`;
+    conn.out = `<div class="note bad small"><b>Fetch failed:</b> ${esc(e.name === "AbortError" ? "no answer from the data service in time" : (e.message || String(e)))}</div>`;
   }
-  conn.busy = false; renderView();
+  conn.busy = false; conn.busyText = ""; renderView();
+}
+async function connLoadCompanies(){
+  if (conn.companies || conn.compLoading) return; conn.compLoading = true;
+  try { const j = await connGet("/companies", 120000); conn.companies = j.companies || []; conn.compSrc = `${j.source}, retrieved ${j.retrieved}`; conn.compErr = ""; }
+  catch(e) { conn.companies = null; conn.compErr = e.message || String(e); }
+  conn.compLoading = false; connRender();
+}
+function compRows(){
+  const L = conn.companies || [], q = (conn.filter || "").trim().toUpperCase(), sec = conn.sector || "";
+  return L.filter(c => (!q || c.ticker.toUpperCase().includes(q) || (c.name || "").toUpperCase().includes(q)) && (!sec || c.sector === sec));
+}
+function compTable(){
+  const rows = compRows(), shown = rows.slice(0, 200), cur = String(D.meta.ticker || "").toUpperCase(), hasSec = (conn.companies || []).some(c => c.sector);
+  return `<div class="small muted" style="margin:4px 0">${rows.length} of ${(conn.companies||[]).length} companies${rows.length > 200 ? " – first 200 shown, refine the filter" : ""}</div>
+    <div class="tbl-wrap" style="max-height:360px;overflow:auto"><table class="tbl"><thead><tr><th>Code</th><th>Company</th>${hasSec ? "<th>Sector</th><th>Industry</th>" : ""}<th></th></tr></thead><tbody>
+    ${shown.map(c => `<tr${c.ticker === cur ? ' style="background:var(--accent-bg,rgba(0,0,0,.04))"' : ""}><td><b>${esc(c.ticker)}</b></td><td>${esc(c.name)}</td>${hasSec ? `<td class="small">${esc(c.sector)}</td><td class="small">${esc(c.industry)}</td>` : ""}
+      <td style="white-space:nowrap"><button class="ghost" data-act="conn-value" data-t="${esc(c.ticker)}" ${conn.busy ? "disabled" : ""}>Value</button> <button class="ghost" data-act="conn-addp" data-t="${esc(c.ticker)}">+ Peer</button></td></tr>`).join("")}</tbody></table></div>`;
+}
+function compPanel(){
+  if (conn.state !== "on" || !isIDX()) return "";
+  if (!conn.companies) return `<div style="margin-top:12px"><div class="eyebrow">All IDX-listed companies</div><div class="small muted" style="margin-top:4px">${conn.compErr ? `Company list not available: ${esc(conn.compErr)}. Use the search above.` : "Loading the company list from IDX…"}</div></div>`;
+  const secs = [...new Set(conn.companies.map(c => c.sector).filter(Boolean))].sort();
+  return `<div style="margin-top:12px"><div class="eyebrow">All IDX-listed companies <span class="muted" style="text-transform:none;letter-spacing:0">(${esc(conn.compSrc || "")})</span></div>
+    <div class="row" style="gap:8px;margin-top:6px"><input id="conn-filter" value="${esc(conn.filter || "")}" placeholder="Filter by code or name, e.g. BIRD or Astra" aria-label="Filter companies" style="flex:1 1 220px">
+      ${secs.length ? `<select id="conn-sector" aria-label="Sector"><option value="">All sectors</option>${secs.map(x => `<option ${x === conn.sector ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>` : ""}
+      <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="conn-autop" ${conn.autoPeers !== false ? "checked" : ""}> pick peers automatically (same industry)</label></div>
+    <div class="small muted" style="margin-top:4px">Click <b>Value</b>: the company's price, statements and peers are fetched; for a new company the cost-of-capital inputs and the forecast are derived automatically and the valuation is shown. Your current company keeps its own assumptions.</div>
+    <div id="conn-list">${compTable()}</div></div>`;
 }
 async function connSearch(){
   const q = (document.getElementById("conn-q").value || "").trim(); if (q.length < 2) { toast("Type at least two characters."); return; }
@@ -1061,8 +1114,8 @@ V.peers = () => {
     if (kind === "text" || kind === "date") return `<td style="min-width:${k==="name"||k==="source"?220:k==="priceDate"?140:80}px">${txtInput(path,{label:l,type:kind==="date"?"date":null})}</td>`;
     return `<td style="min-width:${k==="sharesMn"||k==="debt"||k==="cash"?120:90}px">${numInput(path, kind, {label:l, optional:["revGrowth","niGrowth","evEbitda"].includes(k)})}</td>`; }).join("")}
     <td><button class="ghost" data-act="delpeer" data-i="${i}" aria-label="Remove ${esc(p.ticker)}">Remove</button></td></tr>`).join("");
-  return head("Peer data", "Comparable IDX-listed land-transport companies. Negative-earnings multiples are excluded automatically. “Close model” marks peers whose business model is close to the valued company's (feeds the method selector). Prices per share and amounts in million, in the dataset currency.",
-    `<div class="row"><button data-act="addpeer">Add peer</button><span class="muted small">Last updated ${fmtTS(D.meta.lastUpdated.peers)}</span></div>`) +
+  return head("Peer data", `Comparable listed companies for ${D.meta.company || "the valued company"}. ` + "Negative-earnings multiples are excluded automatically. “Close model” marks peers whose business model is close to the valued company's (feeds the method selector). Prices per share and amounts in million, in the dataset currency.",
+    `<div class="row"><button data-act="addpeer">Add peer</button><span class="muted small">Last updated ${fmtTS(D.meta.lastUpdated.peers)}</span></div>`) + peerSelPanel() +
   `<div class="panel" style="padding-block:10px"><div class="eyebrow">Source pages per peer</div>
     <div class="stack" style="gap:6px;margin-top:6px">${D.peers.map((p,i) => `<div class="row" style="gap:8px"><b style="min-width:56px">${esc(p.ticker || "?")}</b><span data-peerlinks="${i}">${srcLinks(p.ticker, D.meta.exchange, false)}</span></div>`).join("")}</div>
     <div class="row" style="gap:6px;margin-top:8px"><span class="small muted">Find more peers:</span><a class="btn small-btn" href="https://www.idx.co.id/id/perusahaan-tercatat/profil-perusahaan-tercatat/" target="_blank" rel="noopener">All IDX-listed companies</a><a class="btn small-btn" href="https://finance.yahoo.com/lookup/" target="_blank" rel="noopener">Yahoo Finance search</a></div>
@@ -1323,6 +1376,8 @@ document.addEventListener("change", e => {
   const el = e.target;
   if (el.id === "file-in") { if (el.files && el.files[0]) importFile(el.files[0]); el.value = ""; return; }
   if (el.id === "conn-ind") { conn.ind = el.value; connRender(); return; }
+  if (el.id === "conn-sector") { conn.sector = el.value; const l = document.getElementById("conn-list"); if (l) l.innerHTML = compTable(); return; }
+  if (el.id === "conn-autop") { conn.autoPeers = el.checked; return; }
   const path = el.dataset && el.dataset.path; if (!path) return;
   const kind = el.dataset.kind; let v;
   if (kind === "bool") v = el.checked;
@@ -1347,6 +1402,9 @@ document.addEventListener("click", e => {
   else if (act === "delpeer") { const i = +a.dataset.i, t = D.peers[i].ticker; D.peers.splice(i,1); touch("peers"); logUpdate("peers","remove peer",t); recalc(); toast(`Removed ${t}.`); }
   else if (act === "conn-check") connCheck();
   else if (act === "conn-apply-sugg") applySugg();
+  else if (act === "conn-value") { const t = a.dataset.t; D.meta.exchange = "IDX"; const ap = document.getElementById("conn-autop"); conn.autoPeers = ap ? ap.checked : true;
+    const newCo = t !== String(D.meta.ticker || "").toUpperCase(); connFetch({ticker:t, peers:(newCo && conn.autoPeers) ? "auto" : ((document.getElementById("conn-peers")||{}).value || ""), auto:true}); }
+  else if (act === "conn-addp") { const el = document.getElementById("conn-peers"); if (el) { const set = new Set(el.value.split(/\s+/).filter(Boolean)); set.add(a.dataset.t); el.value = [...set].join(" "); toast(`${a.dataset.t} added to the peer list – click “Fetch data and recalculate”.`); } }
   else if (act === "fc-suggest") { fcSugg = suggestForecast() || false; renderView(); }
   else if (act === "fc-apply") applyFc();
   else if (act === "conn-search") connSearch();
@@ -1365,6 +1423,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("mouseover", e => { const t = e.target.closest && e.target.closest("[data-tip]"); if (t) tipOn(e, esc(t.dataset.tip)); });
 document.addEventListener("mousemove", e => { const t = e.target.closest && e.target.closest("[data-tip]"); if (t) tipOn(e, esc(t.dataset.tip)); else tipOff(); });
+document.addEventListener("input", e => { if (e.target.id === "conn-filter") { conn.filter = e.target.value; const l = document.getElementById("conn-list"); if (l) l.innerHTML = compTable(); } });
 document.addEventListener("input", e => { if (e.target.id === "co-search") { const q = e.target.value.trim(); const a = document.getElementById("co-search-y");
   if (a) a.href = q ? `https://finance.yahoo.com/lookup/?s=${encodeURIComponent(q)}` : "https://finance.yahoo.com/lookup/"; } });
 document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "conn-q") { e.preventDefault(); connSearch(); } });
