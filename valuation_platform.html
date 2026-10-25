@@ -532,7 +532,7 @@ async function connCheck(auto){
 function connRender(){ const el = document.getElementById("conn-panel"); if (el) el.outerHTML = connPanel(); }
 function connPanel(){
   const st = conn.state === "checking" ? `<span class="pill">Checking…</span>`
-    : conn.state === "on" ? `<span class="pill ok">Connected</span> <span class="small muted">${connHosted ? "Data service of this website" : "Local connector"} · Yahoo Finance on · IDX filings ${conn.info && conn.info.idx ? "on" : "off"} · Damodaran on</span>`
+    : conn.state === "on" ? `<span class="pill ok">Connected</span> <span class="small muted">${connHosted ? "Data service of this website" : "Local connector"} · Yahoo Finance on · IDX filings ${conn.info && conn.info.idx ? "on" : conn.info && conn.info.idxBlocked ? "blocked for this server (Yahoo used)" : "off"} · Damodaran on</span>`
     : conn.state === "off" ? `<span class="pill warn">Not connected</span> <span class="small muted">Start <code>python3 data_connector.py</code> on this computer and open the offline file <code>valuation_platform.html</code>; the online link cannot reach your computer.</span>`
     : `<span class="pill">Not checked</span>`;
   const peers = D.peers.map(p => p.ticker).filter(Boolean).join(" ");
@@ -635,7 +635,7 @@ function applyFc(silent){
 function peerSelPanel(){
   const S = D.peerSelection; if (!S || !(S.items || []).length) return "";
   return `<div class="panel"><div class="panel-head"><h3>Why these peers</h3><span class="src">${esc(S.note || "")}</span></div>
-    <p class="small muted">Each candidate from the same IDX industry (or sector) is scored: business model – same industry 40 / same sector 20; size – market value close to the company's, up to 25; profitability – positive EPS so P/E is usable, 15; revenue growth close, up to 10; debt/equity close, up to 10. The five best with at least 40 points become peers; “close model” is set for same-industry peers within 0.2x–5x the company's size.</p>
+    <p class="small muted">Each candidate from the same industry (IDX classification; Yahoo's classification on the Jakarta exchange when IDX is not reachable) or, if there are too few, the same sector is scored: business model – same industry 40 / same sector 20; size – market value close to the company's, up to 25; profitability – positive EPS so P/E is usable, 15; revenue growth close, up to 10; debt/equity close, up to 10. The five best with at least 40 points become peers; “close model” is set for same-industry peers within 0.2x–5x the company's size.</p>
     <div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>Ticker</th><th>Company</th><th class="n">Score</th><th>Peer</th><th>Reasons</th></tr></thead><tbody>
     ${S.items.map((e,i) => `<tr><td>${i+1}</td><td><b>${esc(e.ticker)}</b></td><td>${esc(e.name || "")}</td><td class="n">${f1(e.score)}</td><td>${e.selected ? "✓ selected" : '<span class="muted">–</span>'}</td><td class="small muted">${esc((e.reasons || []).join("; "))}</td></tr>`).join("")}</tbody></table></div></div>`;
 }

@@ -59,14 +59,19 @@ def _pick(d, *names):
         if v not in (None, ""): return str(v).strip()
     return ""
 
+def idx_blocked():
+    """True for 6 h after IDX refused this server (Cloudflare often blocks cloud IPs) - avoids slow retries on every click."""
+    t = STATE.get("idx_blocked_at")
+    return bool(t and (dt.datetime.now() - t).total_seconds() < 21600)
+
 def idx_companies():
     """All IDX-listed shares with sector/industry where IDX provides them (cached 12 h)."""
     c = STATE.get("companies")
     if c and (dt.datetime.now() - c["at"]).total_seconds() < 43200: return c
+    rows, src, errs = [], "", []
     api = idx_api()
-    if not api: raise RuntimeError(f"IDX package not available ({STATE['idx_error']})")
-    rows, src = [], ""
     try:   # company profiles carry sector and industry
+        if not api: raise RuntimeError(f"IDX package not available ({STATE['idx_error']})")
         r = api.client.get("/primary/ListedCompany/GetCompanyProfiles", params={"emitenType": "s", "start": 0, "length": 9999})
         j = r.json(); data = j.get("data") if isinstance(j, dict) else j
         for d in data or []:
@@ -76,18 +81,68 @@ def idx_companies():
                                "listed": _pick(d, "TanggalPencatatan", "Tanggal_Pencatatan", "ListingDate")[:10]})
         src = "IDX listed company profiles"
     except Exception as e:
-        sys.stderr.write(f"IDX company profiles failed: {e}\n")
-    if not rows:   # fallback: plain issuer list (code and name only)
-        rows = [{"ticker": e.get("KodeEmiten", "").strip(), "name": e.get("NamaEmiten", "").strip(), "sector": "", "industry": "", "board": "", "listed": ""}
-                for e in api.get_emitens() if e.get("KodeEmiten")]
-        src = "IDX issuer list"
+        errs.append(f"IDX profiles: {type(e).__name__}: {e}"); sys.stderr.write(errs[-1] + "\n")
+    if not rows and api and STATE["idx"]: STATE["idx_blocked_at"] = dt.datetime.now()
+    if not rows and api and not idx_blocked():   # plain issuer list (code and name only)
+        try:
+            rows = [{"ticker": e.get("KodeEmiten", "").strip(), "name": e.get("NamaEmiten", "").strip(), "sector": "", "industry": "", "board": "", "listed": ""}
+                    for e in api.get_emitens() if e.get("KodeEmiten")]
+            src = "IDX issuer list"
+        except Exception as e:
+            errs.append(f"IDX issuer list: {type(e).__name__}: {e}"); STATE["idx_blocked_at"] = dt.datetime.now()
+    if not rows:   # IDX blocks many cloud servers: Yahoo's equity screener for the Jakarta exchange
+        try:
+            rows = yahoo_companies(); src = "Yahoo Finance equity screener, exchange JKT (IDX not reachable from this server)"
+        except Exception as e:
+            errs.append(f"Yahoo screener: {type(e).__name__}: {e}")
+    if not rows: raise RuntimeError("; ".join(errs) or "no source available")
     rows.sort(key=lambda r: r["ticker"])
     STATE["companies"] = {"at": dt.datetime.now(), "rows": rows, "source": src}
     return STATE["companies"]
 
-def peer_candidates(ticker, cap=12):
+YAHOO_SECTORS = ["Basic Materials", "Communication Services", "Consumer Cyclical", "Consumer Defensive", "Energy", "Financial Services",
+                 "Healthcare", "Industrials", "Real Estate", "Technology", "Utilities"]
+
+def yahoo_companies():
+    import yfinance as yf
+    Q = yf.EquityQuery; rows = {}
+    for sec in YAHOO_SECTORS:
+        off = 0
+        while off < 2000:
+            res = yf.screen(Q("and", [Q("eq", ["exchange", "JKT"]), Q("eq", ["sector", sec])]), offset=off, size=250) or {}
+            qs = res.get("quotes", []) or []
+            for q in qs:
+                sym = q.get("symbol", "")
+                if not sym.endswith(".JK"): continue
+                t = sym[:-3]
+                rows[t] = {"ticker": t, "name": q.get("longName") or q.get("shortName") or t, "sector": sec, "industry": q.get("industry", "") or "",
+                           "board": "", "listed": "", "mcap": q.get("marketCap")}
+            if len(qs) < 250: break
+            off += 250
+    return sorted(rows.values(), key=lambda r: r["ticker"])
+
+def yahoo_industry_peers(industry):
+    import yfinance as yf
+    Q = yf.EquityQuery
+    res = yf.screen(Q("and", [Q("eq", ["exchange", "JKT"]), Q("eq", ["industry", industry])]), size=100) or {}
+    return [(q["symbol"][:-3], q.get("longName") or q.get("shortName") or q["symbol"], q.get("marketCap")) for q in res.get("quotes", []) if q.get("symbol", "").endswith(".JK")]
+
+def peer_candidates(ticker, cap=12, P=None):
     """Same IDX industry first, then same sector; returns [(ticker, name, level)] (level: 'industry' or 'sector')."""
     rows = idx_companies()["rows"]; me = next((r for r in rows if r["ticker"] == ticker.upper()), None)
+    yind = ((P or {}).get("meta") or {}).get("yahooIndustry")
+    if (not me or not me.get("industry")) and yind:   # Yahoo classification: same Yahoo industry on the Jakarta exchange, then same sector by size
+        import math
+        out = []
+        try: out = [(t, n, "industry") for t, n, _ in yahoo_industry_peers(yind) if t != ticker.upper()]
+        except Exception as e: sys.stderr.write(f"Yahoo industry screen failed: {e}\n")
+        sec = (me or {}).get("sector") or ((P or {}).get("meta") or {}).get("yahooSector")
+        if len(out) < 6 and sec:
+            m = (P or {}).get("market") or {}; tm = (m.get("price") or 0) * (m.get("sharesMn") or 0) * 1e6
+            pool = [r for r in rows if r["sector"] == sec and r["ticker"] != ticker.upper() and r["ticker"] not in {o[0] for o in out}]
+            if tm: pool.sort(key=lambda r: abs(math.log((r.get("mcap") or 1) / tm)) if r.get("mcap") else 99)
+            out += [(r["ticker"], r["name"], "sector") for r in pool]
+        return out[:cap], me, f"{len([o for o in out if o[2] == 'industry'])} in the same Yahoo industry ({yind}), sector {sec or '-'}"
     if not me or not (me["industry"] or me["sector"]): return [], None, "no sector data for this company in the IDX list"
     out = [(r["ticker"], r["name"], "industry") for r in rows if me["industry"] and r["industry"] == me["industry"] and r["ticker"] != me["ticker"]]
     if len(out) < 6 and me["sector"]:
@@ -109,8 +164,8 @@ def score_peer(t, r, level):
     """0-100 points with the reasons shown to the user."""
     import math
     pts, why = 0.0, []
-    if level == "industry": pts += 40; why.append("same IDX industry (+40)")
-    else: pts += 20; why.append("same IDX sector only (+20)")
+    if level == "industry": pts += 40; why.append("same industry (+40)")
+    else: pts += 20; why.append("same sector only (+20)")
     mc = (r.get("price") or 0) * (r.get("sharesMn") or 0)
     if mc and t["mcap"]:
         ratio = mc / t["mcap"]; s = 25 * max(0.0, 1 - abs(math.log(ratio)) / math.log(10)); pts += s
@@ -130,7 +185,7 @@ def score_peer(t, r, level):
     return round(pts, 1), why, (mc / t["mcap"] if mc and t["mcap"] else None)
 
 def select_peers(P, ticker, exchange, date, n=5):
-    cands, me, info = peer_candidates(ticker)
+    cands, me, info = peer_candidates(ticker, P=P)
     if not cands: return [], [], f"Peers could not be chosen automatically ({info}); add them by hand."
     sfx = FY.SUFFIX.get(exchange.upper(), ""); t = _target_metrics(P); evald = []; notes = []
     for tk, name, level in cands:
@@ -355,6 +410,8 @@ def fetch(ticker, exchange, peers, date, fin_source):
     if fin_source == "idx":
         if (exchange or "").upper() not in ("IDX", "BEI"):
             P["notes"].append("IDX filings are only available for IDX-listed companies; Yahoo statements used.")
+        elif idx_blocked():
+            P["notes"].append("IDX (idx.co.id) does not answer this server at the moment; statements taken from Yahoo Finance.")
         elif not STATE["idx"]:
             P["notes"].append(f"IDX package not available ({STATE['idx_error']}); Yahoo statements used. Start the connector with --idx-repo <folder>.")
         else:
@@ -363,7 +420,7 @@ def fetch(ticker, exchange, peers, date, fin_source):
             try:
                 idx, bank = idx_financials(ticker.upper(), years)
             except Exception as e:
-                idx, bank = {}, False
+                idx, bank = {}, False; STATE["idx_blocked_at"] = dt.datetime.now()
                 P["notes"].append(f"IDX filings could not be retrieved ({type(e).__name__}: {e}); Yahoo statements used.")
             if idx:
                 yrs = sorted(set(years) | set(idx))[-3:]
@@ -428,7 +485,7 @@ class H(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "no-cache"); self.send_header("Content-Length", str(len(body))); self.end_headers()
                 return self.wfile.write(body)
             if u.path == "/health":
-                return self._send(200, {"ok": True, "version": VERSION, "yahoo": True, "idx": bool(STATE["idx"]), "idxError": STATE["idx_error"]})
+                return self._send(200, {"ok": True, "version": VERSION, "yahoo": True, "idx": bool(STATE["idx"]) and not idx_blocked(), "idxBlocked": idx_blocked(), "idxError": STATE["idx_error"]})
             if u.path == "/companies":
                 try:
                     c = idx_companies()
