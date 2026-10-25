@@ -66,6 +66,13 @@ def fi_shares(tk):
     try: return fi_shares(tk)
     except Exception: return None
 
+def stmt_shares(bal, inc):
+    """Shares outstanding from the statements (works when Yahoo's quote-summary 'info' is refused)."""
+    for df, labels in ((bal, ("Ordinary Shares Number", "Share Issued")), (inc, ("Basic Average Shares", "Diluted Average Shares"))):
+        d = row(df, *labels)
+        if d: return d[max(d)]
+    return None
+
 def statements(tk):
     return tk.income_stmt, tk.balance_sheet, tk.cashflow
 
@@ -136,7 +143,7 @@ def peer_row(sym, ticker, date, notes):
         if not d: return None
         if ys and ys[-1] in d: return d[ys[-1]]
         return d[max(d)]
-    shares = num(info.get("sharesOutstanding")) or fi_shares(tk) or num(info.get("impliedSharesOutstanding"))
+    shares = num(info.get("sharesOutstanding")) or fi_shares(tk) or num(info.get("impliedSharesOutstanding")) or stmt_shares(bal, inc)
     eq = latest(row(bal, "Stockholders Equity", "Common Stock Equity", "Total Equity Gross Minority Interest"))
     rev, ni = row(inc, "Total Revenue", "Operating Revenue"), row(inc, "Net Income Common Stockholders", "Net Income", "Net Income From Continuing Operation Net Minority Interest")
     eps = latest(row(inc, "Basic EPS", "Diluted EPS"))
@@ -158,6 +165,10 @@ def peer_row(sym, ticker, date, notes):
          "revGrowth": growth(rev, ys), "niGrowth": growth(ni, ys), "debt": debt / MN if debt is not None else None,
          "cash": cash / MN if cash is not None else None, "evEbitda": num(info.get("enterpriseToEbitda")),
          "audited": False, "closeModel": True, "source": f"Yahoo Finance via yfinance, FY{ys[-1] if ys else '?'}, retrieved {dt.date.today()}"}
+    if r["evEbitda"] is None:   # EV / EBITDA from the statements when Yahoo's ratio is not available
+        ebitda = latest(row(inc, "EBITDA", "Normalized EBITDA"))
+        if ebitda and ebitda > 0 and price and shares and debt is not None and cash is not None:
+            r["evEbitda"] = round((price * shares + debt - cash) / ebitda, 2)
     gaps = [k for k in PEER_REQUIRED if r.get(k) is None]
     r["complete"] = not gaps
     if gaps: notes.append(f"Peer {ticker}: Yahoo has no {', '.join(gaps)} - not usable as a peer.")
@@ -183,7 +194,7 @@ def collect(ticker, exchange, peers, date):
     years = years_of(inc, bal, cf, n=3)
     if len(years) < 3: notes.append(f"Yahoo has only {len(years)} fiscal years for {sym}; the platform needs 3.")
     fin = fin_block(tk, years, notes, sym)
-    shares = num(info.get("sharesOutstanding")) or fi_shares(tk)
+    shares = num(info.get("sharesOutstanding")) or fi_shares(tk) or stmt_shares(bal, inc)
     tax = None
     if "taxExpense" in fin and "pbt" in fin and fin["pbt"][-1]:
         tax = fin["taxExpense"][-1] / fin["pbt"][-1]

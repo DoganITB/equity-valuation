@@ -72,7 +72,13 @@ def idx_companies():
     api = idx_api()
     try:   # company profiles carry sector and industry
         if not api: raise RuntimeError(f"IDX package not available ({STATE['idx_error']})")
-        r = api.client.get("/primary/ListedCompany/GetCompanyProfiles", params={"emitenType": "s", "start": 0, "length": 9999})
+        if idx_blocked(): raise RuntimeError("IDX blocked for this server")
+        mr = getattr(api.client, "max_retries", None)
+        try:
+            if mr is not None: api.client.max_retries = 1
+            r = api.client.get("/primary/ListedCompany/GetCompanyProfiles", params={"emitenType": "s", "start": 0, "length": 9999}, timeout=12)
+        finally:
+            if mr is not None: api.client.max_retries = mr
         j = r.json(); data = j.get("data") if isinstance(j, dict) else j
         for d in data or []:
             t = _pick(d, "KodeEmiten", "Kode_Emiten", "Code")
@@ -83,7 +89,7 @@ def idx_companies():
     except Exception as e:
         errs.append(f"IDX profiles: {type(e).__name__}: {e}"); sys.stderr.write(errs[-1] + "\n")
     if not rows and api and STATE["idx"]: STATE["idx_blocked_at"] = dt.datetime.now()
-    if not rows and api and not idx_blocked():   # plain issuer list (code and name only)
+    if False:   # the plain issuer list uses the same blocked host; skipped
         try:
             rows = [{"ticker": e.get("KodeEmiten", "").strip(), "name": e.get("NamaEmiten", "").strip(), "sector": "", "industry": "", "board": "", "listed": ""}
                     for e in api.get_emitens() if e.get("KodeEmiten")]
@@ -401,6 +407,11 @@ def fetch(ticker, exchange, peers, date, fin_source):
         raise RuntimeError(f"Yahoo Finance could not be reached or does not know {ticker} on {exchange} ({type(e).__name__}: {e}). "
                            "Check the internet connection and the ticker; if it persists run: pip3 install -U yfinance")
     P["connector"] = {"version": VERSION, "financialSource": "Yahoo"}
+    if P["meta"].get("company", "").upper() == ticker.upper():
+        try:
+            hit = next((r for r in (STATE.get("companies") or {}).get("rows", []) if r["ticker"] == ticker.upper()), None)
+            if hit and hit.get("name"): P["meta"]["company"] = hit["name"]
+        except Exception: pass
     try:
         P["damodaran"] = damodaran(exchange, P["meta"].get("country"), P["meta"].get("yahooIndustry"), P["meta"].get("yahooSector"), P["meta"].get("currency"))
     except Exception as e:
@@ -452,6 +463,25 @@ def fetch(ticker, exchange, peers, date, fin_source):
                     P["notes"].append("IDX package reports in IDR million; check the currency.")
     return P
 
+def diagnose(ticker, exchange):
+    """Tests every data source from this server - open /diag in the browser."""
+    import time, yfinance as yf
+    sym = ticker.upper() + FY.SUFFIX.get(exchange.upper(), ""); out = {"server_time": str(dt.datetime.now()), "symbol": sym}
+    def t(name, fn):
+        a = time.time()
+        try: v = fn(); out[name] = {"ok": True, "result": v, "sec": round(time.time() - a, 1)}
+        except Exception as e: out[name] = {"ok": False, "error": f"{type(e).__name__}: {e}"[:300], "sec": round(time.time() - a, 1)}
+    tk = yf.Ticker(sym)
+    t("yahoo_info", lambda: {k: tk.info.get(k) for k in ("longName", "sharesOutstanding", "beta", "industry", "sector")})
+    t("yahoo_history", lambda: str(tk.history(period="5d")["Close"].tail(1).to_dict()))
+    t("yahoo_balance_sheet_rows", lambda: list(tk.balance_sheet.index)[:40])
+    t("yahoo_income_rows", lambda: list(tk.income_stmt.index)[:30])
+    t("yahoo_screener", lambda: len((yf.screen(yf.EquityQuery("and", [yf.EquityQuery("eq", ["exchange", "JKT"]), yf.EquityQuery("eq", ["sector", "Industrials"])]), size=25) or {}).get("quotes", [])))
+    t("damodaran_country", lambda: damo_country(EX_COUNTRY.get(exchange.upper(), "Indonesia")))
+    t("idx_package_loaded", lambda: bool(STATE["idx"]) or STATE["idx_error"])
+    t("idx_blocked_flag", lambda: idx_blocked())
+    return out
+
 # ---------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
     def _send(self, code, obj):
@@ -486,6 +516,8 @@ class H(BaseHTTPRequestHandler):
                 return self.wfile.write(body)
             if u.path == "/health":
                 return self._send(200, {"ok": True, "version": VERSION, "yahoo": True, "idx": bool(STATE["idx"]) and not idx_blocked(), "idxBlocked": idx_blocked(), "idxError": STATE["idx_error"]})
+            if u.path == "/diag":
+                return self._send(200, diagnose(q.get("ticker", "BIRD"), q.get("exchange", "IDX")))
             if u.path == "/companies":
                 try:
                     c = idx_companies()

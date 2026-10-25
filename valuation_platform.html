@@ -701,7 +701,7 @@ async function connFetch(opts){
 }
 async function connLoadCompanies(){
   if (conn.companies || conn.compLoading) return; conn.compLoading = true;
-  try { const j = await connGet("/companies", 120000); conn.companies = j.companies || []; conn.compSrc = `${j.source}, retrieved ${j.retrieved}`; conn.compErr = ""; }
+  try { const j = await connGet("/companies", 240000); conn.companies = j.companies || []; conn.compSrc = `${j.source}, retrieved ${j.retrieved}`; conn.compErr = ""; }
   catch(e) { conn.companies = null; conn.compErr = e.message || String(e); }
   conn.compLoading = false; connRender();
 }
